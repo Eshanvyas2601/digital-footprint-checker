@@ -1,8 +1,8 @@
-DigitalTrace — Citizen Digital Footprint & Scam Awareness Tool
+# DigitalTrace — Citizen Digital Footprint & Scam Awareness Tool
 
 Track: Knowledge & Public Interest — SerpApi India Hackathon 2026
 
-The Problem
+## The Problem
 
 Online scams and identity misuse are a growing public safety concern in India, and most citizens have no easy way to check their own digital exposure or verify a suspicious contact before a transaction.
 

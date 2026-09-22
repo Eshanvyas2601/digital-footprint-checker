@@ -1,11 +1,19 @@
 import os
 from dotenv import load_dotenv
 import requests
+import cloudinary
+import cloudinary.uploader
 
 load_dotenv()
 
 API_KEY = os.getenv("SERPAPI_KEY")
 BASE_URL = "https://serpapi.com/search"
+
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
+)
 
 
 def search_text(query):
@@ -30,6 +38,15 @@ def search_reverse_image(image_url):
     return response.json()
 
 
+def upload_image_temp(image_file):
+    """
+    Uploads an image file to Cloudinary and returns a public URL.
+    image_file: a file-like object (e.g. from Streamlit's file uploader, or an open() file)
+    """
+    result = cloudinary.uploader.upload(image_file)
+    return result.get("secure_url")
+
+
 def build_targeted_query(value, input_type):
     """Builds smarter queries depending on input type."""
     if input_type == "email":
@@ -42,24 +59,15 @@ def build_targeted_query(value, input_type):
 
 
 if __name__ == "__main__":
-    # Test 1: Name search
-    test_query = build_targeted_query("Eshan Vyas", "name")
-    result = search_text(test_query)
-    
-    organic_results = result.get("organic_results", [])
-    for item in organic_results[:5]:
-        print("Title:", item.get("title"))
-        print("Link:", item.get("link"))
-        print("Snippet:", item.get("snippet"))
-        print("---")
-    
-    # Test 2: Reverse image search
-    print("\n=== REVERSE IMAGE TEST ===\n")
-    test_image_url = "https://upload.wikimedia.org/wikipedia/commons/8/8d/President_Barack_Obama.jpg"
-    image_result = search_reverse_image(test_image_url)
-    print(image_result.get("error"))
+    print("=== FULL REVERSE IMAGE PIPELINE TEST ===\n")
+    with open("test_image.jpg", "rb") as f:
+        uploaded_url = upload_image_temp(f)
+        print("Uploaded URL:", uploaded_url)
+
+    print("\nSearching for matches...\n")
+    image_result = search_reverse_image(uploaded_url)
     image_matches = image_result.get("image_results", [])
-    
+
     if not image_matches:
         print("No image matches found.")
     else:

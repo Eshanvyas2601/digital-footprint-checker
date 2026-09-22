@@ -1,6 +1,7 @@
 import streamlit as st
 from serpapi_client import search_text, search_reverse_image, build_targeted_query, upload_image_temp
 from analyzer import analyze_results
+from pdf_generator import generate_pdf_report
 
 st.set_page_config(page_title="DigitalTrace - Footprint Checker", page_icon="🔍")
 
@@ -60,3 +61,14 @@ if st.button("Check Footprint"):
                     st.write(item.get("link"))
                     st.write(item.get("snippet"))
                     st.divider()
+
+            pdf_bytes = generate_pdf_report(
+                input_type, input_value, report,
+                results.get("organic_results", [])[:8]
+            )
+            st.download_button(
+                label="📄 Download Report as PDF",
+                data=pdf_bytes,
+                file_name=f"digitaltrace_report_{input_type}.pdf",
+                mime="application/pdf"
+            )

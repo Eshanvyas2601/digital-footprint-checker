@@ -2,6 +2,7 @@ import os
 import time
 from dotenv import load_dotenv
 from google import genai
+from risk_scorer import calculate_risk_score
 
 load_dotenv()
 
@@ -20,22 +21,29 @@ def analyze_results(search_results, input_type, input_value):
             "snippet": item.get("snippet")
         })
 
+    # Calculate the risk score using fixed rules (no AI)
+    score, risk_level, evidence = calculate_risk_score(search_results, input_type, input_value)
+    evidence_text = "\n".join(f"- {e}" for e in evidence)
+
     prompt = f"""
 You are a digital footprint analysis assistant helping an everyday citizen understand what's publicly findable about a {input_type}: "{input_value}".
 
 Here are the raw search results:
 {simplified}
 
+A rule-based scoring system has already calculated the risk level as {risk_level} (score: {score}) based on this evidence:
+{evidence_text}
+
 Your task:
 1. Summarize what you find in plain, non-technical language.
-2. Flag any inconsistencies — e.g. same name/photo linked to very different jobs, locations, or unrelated profiles.
-3. Give a simple risk indicator: LOW, MEDIUM, or HIGH — based on how confusing or suspicious the footprint looks (e.g. many unrelated people sharing the same name = MEDIUM, since it could cause mistaken identity when verifying someone).
+2. Explain the flags using the evidence above (plus anything else clearly relevant you notice in the results).
+3. Do NOT invent or change the risk level — it has already been calculated by the rules above. Just explain why it makes sense.
 4. Keep the tone helpful and non-alarming — this is for citizen awareness, not accusation.
 
 Respond in this format:
 SUMMARY: <2-3 sentences>
 FLAGS: <bullet list, or "None found">
-RISK LEVEL: <LOW/MEDIUM/HIGH>
+RISK LEVEL: {risk_level} (evidence-based score: {score})
 """
 
     for model_name in MODELS_TO_TRY:
@@ -50,7 +58,7 @@ RISK LEVEL: <LOW/MEDIUM/HIGH>
                 print(f"Model {model_name}, attempt {attempt + 1} failed: {e}")
                 time.sleep(5)
 
-    return "Analysis failed after multiple attempts across models. Please try again later."
+    return f"Analysis failed after multiple attempts. Rule-based risk level was: {risk_level} (score: {score})\n\nEvidence:\n{evidence_text}"
 
 
 if __name__ == "__main__":
@@ -58,6 +66,7 @@ if __name__ == "__main__":
         "organic_results": [
             {"title": "Eshan Vyas - Financial Analyst @ ServiceNow", "link": "https://linkedin.com/in/eshanvyas", "snippet": "Financial Analyst, Austin & Bay Area"},
             {"title": "Eshan Vyas - Student, Amity University", "link": "https://in.linkedin.com/in/eshan-vyas-390161328", "snippet": "Third Year Engineering Student, Noida"},
+            {"title": "Eshan Vyas - Instagram", "link": "https://instagram.com/eshan.vyas", "snippet": "Boxing, Mic, Conversations"},
         ]
     }
     result = analyze_results(dummy_results, "name", "Eshan Vyas")

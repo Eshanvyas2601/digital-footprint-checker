@@ -47,13 +47,20 @@ def upload_image_temp(image_file):
     return result.get("secure_url")
 
 
-def build_targeted_query(value, input_type):
-    """Builds smarter queries depending on input type."""
+def build_targeted_query(value, input_type, platform=None):
+    """Builds smarter queries depending on input type, optionally targeting one platform."""
     if input_type == "email":
         return f'"{value}"'
     elif input_type == "phone":
         return f'"{value}"'
     elif input_type == "name":
+        if platform and platform != "All platforms":
+            site_map = {
+                "LinkedIn": "site:linkedin.com",
+                "Instagram": "site:instagram.com",
+                "Facebook": "site:facebook.com"
+            }
+            return f'"{value}" {site_map.get(platform, "")}'
         return f'"{value}" site:linkedin.com OR site:facebook.com OR site:instagram.com'
     return value
 

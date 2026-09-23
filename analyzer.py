@@ -43,7 +43,9 @@ Your task:
 Respond in this format:
 SUMMARY: <2-3 sentences>
 FLAGS: <bullet list, or "None found">
-RISK LEVEL: {risk_level} (evidence-based score: {score})
+FOOTPRINT CONFUSABILITY: {risk_level} (evidence-based score: {score})
+
+Important: "Confusability" measures how easy it would be to mix up this identity with others online (e.g. due to shared names, conflicting profiles, or scattered results) — it does NOT mean the searched person is dangerous, suspicious, or "at risk" themselves. Make sure your summary reflects this framing clearly, especially if the level is HIGH.
 """
 
     for model_name in MODELS_TO_TRY:

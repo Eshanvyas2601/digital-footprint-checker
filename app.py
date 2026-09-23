@@ -10,10 +10,13 @@ st.caption("Check your public digital footprint — for self-verification and ci
 
 input_type = st.selectbox("What are you checking?", ["name", "email", "phone", "image"])
 
+platform = None
 if input_type == "image":
     uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 else:
     input_value = st.text_input(f"Enter the {input_type}:")
+    if input_type == "name":
+        platform = st.selectbox("Search on a specific platform (optional):", ["All platforms", "LinkedIn", "Instagram", "Facebook"])
 
 if st.button("Check Footprint"):
     if input_type == "image":
@@ -46,15 +49,16 @@ if st.button("Check Footprint"):
             st.warning("Please enter a value first.")
         else:
             with st.spinner("Searching public records..."):
-                query = build_targeted_query(input_value, input_type)
+                query = build_targeted_query(input_value, input_type, platform)
                 results = search_text(query)
 
             with st.spinner("Analyzing results..."):
                 report = analyze_results(results, input_type, input_value)
 
             st.subheader("Report")
+            st.caption("ℹ️ 'Footprint Confusability' measures how easily this identity could be mixed up with others online — it is not a judgment of danger or wrongdoing.")
             st.write(report)
-
+            
             with st.expander("See raw search results"):
                 for item in results.get("organic_results", [])[:8]:
                     st.markdown(f"**{item.get('title')}**")

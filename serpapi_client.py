@@ -65,20 +65,38 @@ def build_targeted_query(value, input_type, platform=None):
     return value
 
 
+def multi_query_search(name):
+    """
+    Runs multiple targeted searches for a name instead of one broad search,
+    tagging each result with which query surfaced it. This gives cleaner,
+    more distinguishable signal per platform/category than one mixed search.
+    """
+    queries = {
+        "LinkedIn": f'"{name}" site:linkedin.com',
+        "Instagram": f'"{name}" site:instagram.com',
+        "Facebook": f'"{name}" site:facebook.com',
+        "News/Articles": f'"{name}" (news OR article OR press)',
+        "Other/General": f'"{name}" -site:linkedin.com -site:facebook.com -site:instagram.com',
+    }
+
+    all_results = []
+    for source_label, query in queries.items():
+        try:
+            data = search_text(query)
+            organic = data.get("organic_results", [])[:5]  # top 5 per query, keeps it manageable
+            for item in organic:
+                item["query_source"] = source_label  # tag which search found this
+                all_results.append(item)
+        except Exception as e:
+            print(f"Query for {source_label} failed: {e}")
+
+    return all_results
+
+
 if __name__ == "__main__":
-    print("=== FULL REVERSE IMAGE PIPELINE TEST ===\n")
-    with open("test_image.jpg", "rb") as f:
-        uploaded_url = upload_image_temp(f)
-        print("Uploaded URL:", uploaded_url)
-
-    print("\nSearching for matches...\n")
-    image_result = search_reverse_image(uploaded_url)
-    image_matches = image_result.get("image_results", [])
-
-    if not image_matches:
-        print("No image matches found.")
-    else:
-        for item in image_matches[:3]:
-            print("Title:", item.get("title"))
-            print("Link:", item.get("link"))
-            print("---")
+    print("=== MULTI-QUERY TEST ===\n")
+    results = multi_query_search("Eshan Vyas")
+    for item in results:
+        print(f"[{item['query_source']}]", item.get("title"))
+        print(item.get("link"))
+        print("---")

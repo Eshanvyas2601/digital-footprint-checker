@@ -1,6 +1,7 @@
 import streamlit as st
-from serpapi_client import search_text, search_reverse_image, build_targeted_query, upload_image_temp
-from analyzer import analyze_results
+from serpapi_client import search_text, search_reverse_image, build_targeted_query, upload_image_temp, multi_query_search
+from analyzer import analyze_results, analyze_clustered_results
+from identity_clustering import cluster_identities
 from pdf_generator import generate_pdf_report
 
 st.set_page_config(page_title="DigitalTrace - Footprint Checker", page_icon="🔍")
@@ -15,8 +16,6 @@ if input_type == "image":
     uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 else:
     input_value = st.text_input(f"Enter the {input_type}:")
-    if input_type == "name":
-        platform = st.selectbox("Search on a specific platform (optional):", ["All platforms", "LinkedIn", "Instagram", "Facebook"])
 
 if st.button("Check Footprint"):
     if input_type == "image":
@@ -44,12 +43,59 @@ if st.button("Check Footprint"):
                             st.markdown(f"**{item.get('title')}**")
                             st.write(item.get("link"))
                             st.divider()
+
+    elif input_type == "name":
+        if not input_value.strip():
+            st.warning("Please enter a name first.")
+        else:
+            with st.spinner("Running multi-query OSINT search..."):
+                results = multi_query_search(input_value)
+
+            with st.spinner("Clustering results into likely identities..."):
+                clusters = cluster_identities(results)
+
+            with st.spinner("Analyzing..."):
+                report = analyze_clustered_results(clusters, input_type, input_value)
+
+            st.subheader("Report")
+            st.caption("ℹ️ 'Footprint Confusability' measures how easily this identity could be mixed up with others online — it is not a judgment of danger or wrongdoing.")
+            st.write(report)
+
+            distinct_clusters = [c for c in clusters if len(c) >= 2]
+            other_mentions = [c for c in clusters if len(c) == 1]
+
+            if distinct_clusters:
+                with st.expander(f"See distinct profiles found ({len(distinct_clusters)})"):
+                    for i, cluster in enumerate(distinct_clusters, 1):
+                        st.markdown(f"**Cluster {i}**")
+                        for item in cluster:
+                            st.write(f"[{item.get('query_source')}] {item.get('title')}")
+                            st.write(item.get("link"))
+                        st.divider()
+
+            if other_mentions:
+                with st.expander(f"See other individual mentions ({len(other_mentions)})"):
+                    for cluster in other_mentions:
+                        for item in cluster:
+                            st.write(f"[{item.get('query_source')}] {item.get('title')} — {item.get('link')}")
+
+            all_items = [item for cluster in clusters for item in cluster]
+            pdf_bytes = generate_pdf_report(
+                input_type, input_value, report, all_items[:15]
+            )
+            st.download_button(
+                label="📄 Download Report as PDF",
+                data=pdf_bytes,
+                file_name=f"digitaltrace_report_{input_type}.pdf",
+                mime="application/pdf"
+            )
+
     else:
         if not input_value.strip():
             st.warning("Please enter a value first.")
         else:
             with st.spinner("Searching public records..."):
-                query = build_targeted_query(input_value, input_type, platform)
+                query = build_targeted_query(input_value, input_type)
                 results = search_text(query)
 
             with st.spinner("Analyzing results..."):
@@ -58,7 +104,7 @@ if st.button("Check Footprint"):
             st.subheader("Report")
             st.caption("ℹ️ 'Footprint Confusability' measures how easily this identity could be mixed up with others online — it is not a judgment of danger or wrongdoing.")
             st.write(report)
-            
+
             with st.expander("See raw search results"):
                 for item in results.get("organic_results", [])[:8]:
                     st.markdown(f"**{item.get('title')}**")

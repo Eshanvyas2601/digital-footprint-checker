@@ -2,129 +2,66 @@ import os
 import time
 from dotenv import load_dotenv
 from google import genai
-from risk_scorer import calculate_risk_score
 
 load_dotenv()
-
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY)
-
 MODELS_TO_TRY = ["gemini-3.6-flash"]
 
 
-def analyze_results(search_results, input_type, input_value):
-    simplified = []
-    for item in search_results.get("organic_results", [])[:8]:
-        simplified.append({
-            "title": item.get("title"),
-            "link": item.get("link"),
-            "snippet": item.get("snippet")
-        })
-
-    score, risk_level, evidence = calculate_risk_score(search_results, input_type, input_value)
-    evidence_text = "\n".join(f"- {e}" for e in evidence)
+def generate_narrative(input_type, input_value, risk, extra_context=""):
+    """
+    Gemini's ONLY job: explain the already-calculated score and signals in
+    plain language, and suggest verification actions. It never decides the
+    score, level, or signals — those come from risk_scorer.py.
+    """
+    signals_text = "\n".join(
+        f"- {s['label']} (+{s['points']} pts): {s['reason']}" for s in risk["signals"]
+    ) or "No specific risk signals were triggered."
 
     prompt = f"""
-You are a digital footprint analysis assistant helping an everyday citizen understand what's publicly findable about a {input_type}: "{input_value}".
+You are a digital footprint analysis assistant. A deterministic rule-based engine has
+already analyzed public search results for the {input_type} "{input_value}" and produced
+this assessment — do NOT change or second-guess these numbers:
 
-Here are the raw search results:
-{simplified}
+Overall exposure score: {risk['score']}/100
+Risk level: {risk['level']}
+Consistent references: {risk['consistent_count']}
+Ambiguous/flagged results: {risk['ambiguous_count']}
 
-A rule-based scoring system has already calculated the risk level as {risk_level} (score: {score}) based on this evidence:
-{evidence_text}
+Triggered signals:
+{signals_text}
+
+{extra_context}
 
 Your task:
-1. Summarize what you find in plain, non-technical language.
-2. Explain the flags using the evidence above (plus anything else clearly relevant you notice in the results).
-3. Do NOT invent or change the risk level — it has already been calculated by the rules above. Just explain why it makes sense.
-4. Keep the tone helpful and non-alarming — this is for citizen awareness, not accusation.
+1. Write a 2-3 sentence plain-language SUMMARY of what this means for an everyday citizen.
+2. Suggest exactly 3 short, practical RECOMMENDED ACTIONS for verifying this identity.
+3. Do not mention or invent any score, level, or signal not given above.
+4. Keep tone calm and non-alarming — this measures identity confusability/exposure, not danger.
 
-Respond in this format:
-SUMMARY: <2-3 sentences>
-FLAGS: <bullet list, or "None found">
-FOOTPRINT CONFUSABILITY: {risk_level} (evidence-based score: {score})
-
-Important: "Confusability" measures how easy it would be to mix up this identity with others online (e.g. due to shared names, conflicting profiles, or scattered results) — it does NOT mean the searched person is dangerous, suspicious, or "at risk" themselves. Make sure your summary reflects this framing clearly, especially if the level is HIGH.
+Respond in this exact format:
+SUMMARY: <text>
+RECOMMENDED ACTIONS:
+- <action 1>
+- <action 2>
+- <action 3>
 """
 
     for model_name in MODELS_TO_TRY:
         for attempt in range(6):
             try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt
-                )
+                response = client.models.generate_content(model=model_name, contents=prompt)
                 return response.text
             except Exception as e:
                 print(f"Model {model_name}, attempt {attempt + 1} failed: {e}")
                 time.sleep(10)
 
-    return f"Analysis failed after multiple attempts. Rule-based risk level was: {risk_level} (score: {score})\n\nEvidence:\n{evidence_text}"
-
-
-def analyze_clustered_results(clusters, input_type, input_value):
-    """
-    Takes identity clusters (from identity_clustering.py) and produces
-    a report that explains distinct identities found, using the same
-    evidence-based risk scoring as the standard flow.
-    """
-    all_items = [item for cluster in clusters for item in cluster]
-    wrapped = {"organic_results": all_items}
-
-    score, risk_level, evidence = calculate_risk_score(wrapped, input_type, input_value)
-    evidence_text = "\n".join(f"- {e}" for e in evidence)
-
-    cluster_summary_lines = []
-    for i, cluster in enumerate(clusters, 1):
-        top_titles = [item.get("title", "") for item in cluster[:3]]
-        cluster_summary_lines.append(f"Cluster {i} ({len(cluster)} result(s)): {top_titles}")
-    cluster_summary_text = "\n".join(cluster_summary_lines)
-
-    prompt = f"""
-You are a digital footprint analysis assistant. A multi-query OSINT search for the {input_type} "{input_value}" was run, and results were automatically grouped into likely-identity clusters based on shared location/role/profile signals.
-
-Here are the identity clusters found:
-{cluster_summary_text}
-
-A rule-based scoring system has already calculated the overall footprint confusability as {risk_level} (score: {score}) based on:
-{evidence_text}
-
-Your task:
-1. Summarize in plain language how many likely distinct people/identities appear to share this {input_type}, based on the clusters.
-2. Briefly describe what each larger cluster (2+ results) seems to represent (e.g. "a US-based finance professional" vs "a student in India").
-3. Do NOT invent or change the confusability level — just explain why it makes sense given the clustering.
-4. Keep the tone helpful and non-alarming.
-
-Respond in this format:
-SUMMARY: <2-3 sentences>
-DISTINCT IDENTITIES: <bullet list, one per notable cluster>
-FOOTPRINT CONFUSABILITY: {risk_level} (evidence-based score: {score})
-
-Important: "Confusability" measures how easily this identity could be mixed up with others online — it does NOT mean the searched person is dangerous or at risk themselves.
-"""
-
-    for model_name in MODELS_TO_TRY:
-        for attempt in range(6):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt
-                )
-                return response.text
-            except Exception as e:
-                print(f"Model {model_name}, attempt {attempt + 1} failed: {e}")
-                time.sleep(10)
-
-    return f"Analysis failed after multiple attempts. Footprint confusability: {risk_level} (score: {score})"
-
-
-if __name__ == "__main__":
-    dummy_results = {
-        "organic_results": [
-            {"title": "Eshan Vyas - Financial Analyst @ ServiceNow", "link": "https://linkedin.com/in/eshanvyas", "snippet": "Financial Analyst, Austin & Bay Area"},
-            {"title": "Eshan Vyas - Student, Amity University", "link": "https://in.linkedin.com/in/eshan-vyas-390161328", "snippet": "Third Year Engineering Student, Noida"},
-            {"title": "Eshan Vyas - Instagram", "link": "https://instagram.com/eshan.vyas", "snippet": "Boxing, Mic, Conversations"},
-        ]
-    }
-    result = analyze_results(dummy_results, "name", "Eshan Vyas")
-    print(result)
+    return (
+        f"SUMMARY: Unable to generate an AI explanation right now, but the evidence-based "
+        f"assessment above ({risk['level']}, {risk['score']}/100) still applies.\n"
+        "RECOMMENDED ACTIONS:\n"
+        "- Verify identity through an independent channel\n"
+        "- Avoid sharing sensitive information until verified\n"
+        "- Cross-check details against official sources"
+    )

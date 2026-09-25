@@ -1,130 +1,225 @@
+"""
+Deterministic, evidence-based risk scoring engine for DigitalTrace.
+
+Design: each "signal" is a specific, explainable pattern found in the evidence,
+with a fixed point weight. Signals sum into a total score (capped at 100),
+which maps to a risk level via fixed thresholds. Gemini never decides the
+score — it only explains signals already calculated here.
+
+Scoring methodology (out of 100):
+  Identity inconsistency (conflicting roles, same name)        +25
+  Multiple conflicting profiles (3+ distinct clusters)          +15
+  Contact inconsistency (email/phone tied to differing names)  +20
+  Image reuse (photo found on 3+ unrelated domains)             +25
+  Suspicious / low-context source (data-aggregator domains)     +10
+  Numeric-heavy handle (pattern common in fake accounts)         +5
+  Low-quality lookup sites (auto-generated spam directories)     +5
+
+Risk level thresholds: 0-25 LOW | 26-55 MEDIUM | 56+ HIGH
+"""
+
 import re
-from urllib.parse import urlparse
+from evidence_engine import build_evidence_list
 
 
-def extract_domain(link):
-    try:
-        return urlparse(link).netloc.replace("www.", "")
-    except Exception:
-        return ""
+def _name_candidates(text):
+    return set(re.findall(r'\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b', text or ""))
 
 
-def has_numeric_heavy_handle(link):
-    """Checks if a profile URL's handle/slug contains unusually many digits (common in fake accounts)."""
-    match = re.search(r'/(?:in|p|pub)/([a-zA-Z0-9_\-.]+)', link)
-    if not match:
+def _has_numeric_heavy_handle(evidence):
+    handle = evidence.get("handle")
+    if not handle:
         return False
-    slug = match.group(1)
-    digit_count = sum(c.isdigit() for c in slug)
-    return digit_count >= 4  # e.g. "johndoe83920" style handles
+    return sum(c.isdigit() for c in handle) >= 4
 
 
-def detect_role_conflict(titles):
-    """
-    Very lightweight heuristic: looks for common job/role keywords across titles
-    and flags if multiple clearly different fields appear.
-    """
-    role_categories = {
-        "finance": ["financial analyst", "accountant", "banker", "investment"],
-        "engineering": ["engineer", "developer", "commissioning", "technician"],
-        "student": ["student", "university", "college", "school"],
-        "creative": ["author", "writer", "artist", "designer"],
-        "medical": ["doctor", "nurse", "physician", "medical"],
-    }
-    found_categories = set()
-    combined = " ".join(titles).lower()
-    for category, keywords in role_categories.items():
-        if any(keyword in combined for keyword in keywords):
-            found_categories.add(category)
-    return found_categories
+def signal_identity_inconsistency(clusters):
+    if not clusters or len(clusters) < 2:
+        return None
+    role_sets = []
+    for cluster in clusters:
+        roles = set()
+        for ev in cluster:
+            roles |= ev.get("detected_roles", set())
+        if roles:
+            role_sets.append((cluster, roles))
+    if len(role_sets) < 2:
+        return None
+    for i in range(len(role_sets)):
+        for j in range(i + 1, len(role_sets)):
+            cluster_a, roles_a = role_sets[i]
+            cluster_b, roles_b = role_sets[j]
+            if roles_a and roles_b and not (roles_a & roles_b):
+                return {
+                    "id": "identity_inconsistency",
+                    "label": "Identity inconsistency",
+                    "points": 25,
+                    "evidence": [cluster_a[0], cluster_b[0]],
+                    "reason": (
+                        f"Results tied to the same identity show conflicting professional fields "
+                        f"({', '.join(roles_a)} vs {', '.join(roles_b)}), suggesting these are likely "
+                        f"different individuals sharing the same name, not one person."
+                    ),
+                }
+    return None
 
 
-def calculate_risk_score(search_results, input_type, input_value):
-    """
-    Analyzes raw search results using fixed rules and returns:
-    (score, risk_level, evidence_list)
-    No AI involved here — pure counting and pattern-matching.
-    """
-    organic_results = search_results.get("organic_results", [])
-    evidence = []
-    score = 0
+def signal_multiple_conflicting_profiles(clusters):
+    profile_clusters = [
+        c for c in clusters if any(e["source_type"] == "social_media" for e in c)
+    ] if clusters else []
+    if len(profile_clusters) >= 3:
+        return {
+            "id": "multiple_profiles",
+            "label": "Multiple conflicting profiles",
+            "points": 15,
+            "evidence": [c[0] for c in profile_clusters[:3]],
+            "reason": (
+                f"Found {len(profile_clusters)} distinct profile clusters across social/professional "
+                f"platforms under the same identity, increasing the chance of mistaking one person for another."
+            ),
+        }
+    return None
 
-    if not organic_results:
-        evidence.append("No public search results were found for this input.")
-        return 0, "LOW", evidence
 
-    titles = [item.get("title", "") for item in organic_results]
-    snippets = [item.get("snippet", "") for item in organic_results]
-    combined_text = " ".join(titles + snippets).lower()
+def signal_contact_inconsistency(evidence_list, input_type):
+    if input_type not in ("email", "phone"):
+        return None
+    name_sets = []
+    for ev in evidence_list:
+        if ev.get("source_type") == "spam_lookup":
+            continue
+        names = _name_candidates(f"{ev['title']} {ev['snippet']}")
+        if names:
+            name_sets.append((ev, names))
+    if len(name_sets) < 2:
+        return None
+    for i in range(len(name_sets)):
+        for j in range(i + 1, len(name_sets)):
+            ev_a, names_a = name_sets[i]
+            ev_b, names_b = name_sets[j]
+            if not (names_a & names_b):
+                return {
+                    "id": "contact_inconsistency",
+                    "label": "Contact inconsistency",
+                    "points": 20,
+                    "evidence": [ev_a, ev_b],
+                    "reason": (
+                        "The same contact detail appears in results referencing different names, "
+                        "which may indicate it is shared, reused, or tied to more than one identity."
+                    ),
+                }
+    return None
 
-    # Rule 1: Multiple distinct social/professional profiles found
-    profile_links = [
-        item for item in organic_results
-        if any(domain in item.get("link", "") for domain in ["linkedin.com", "facebook.com", "instagram.com"])
-    ]
-    if len(profile_links) >= 3:
-        score += 2
-        evidence.append(
-            f"Found {len(profile_links)} distinct social/professional profile links — possible multiple-identity overlap under the same {input_type}."
-        )
 
-    # Rule 2: Name/URL mismatch (only meaningful for name searches)
-    if input_type == "name":
-        name_parts = [p.lower() for p in input_value.split() if len(p) > 2]
-        for item in organic_results:
-            link = item.get("link", "")
-            match = re.search(r'/in/([a-zA-Z0-9\-]+)', link)
-            if match:
-                slug = re.sub(r'[\d\-]', ' ', match.group(1).lower())
-                if name_parts and not any(part in slug for part in name_parts):
-                    score += 2
-                    evidence.append(
-                        f"A profile URL ('{match.group(1)}') doesn't clearly match the searched name — possible identity inconsistency."
-                    )
-                    break
-
-    # Rule 3: Domain diversity
-    domains = {extract_domain(item.get("link", "")) for item in organic_results if item.get("link")}
+def signal_image_reuse(image_matches):
+    if not image_matches:
+        return None
+    evidence = build_evidence_list(image_matches)
+    domains = {e["domain"] for e in evidence}
     domains.discard("")
-    if len(domains) >= 4:
-        score += 1
-        evidence.append(
-            f"Results span {len(domains)} different platforms/domains, indicating a broad or scattered digital footprint."
-        )
+    if len(domains) >= 3:
+        return {
+            "id": "image_reuse",
+            "label": "Image reuse",
+            "points": 25,
+            "evidence": evidence[:2],
+            "reason": (
+                f"This image appears on {len(domains)} unrelated domains, which can indicate a stolen "
+                f"or reused photo — a common pattern in fake profiles."
+            ),
+        }
+    return None
 
-    # Rule 4: Geographic diversity (crude keyword check)
-    geo_terms = ["india", "usa", "united states", "uk", "canada", "australia", "noida", "austin", "bay area", "indore"]
-    found_geos = {geo for geo in geo_terms if geo in combined_text}
-    if len(found_geos) >= 2:
-        score += 1
-        evidence.append(
-            f"Results reference multiple distinct locations ({', '.join(found_geos)}), suggesting different individuals rather than one person."
-        )
 
-    # Rule 5: Job/role conflict across results
-    role_categories = detect_role_conflict(titles)
-    if len(role_categories) >= 2:
-        score += 2
-        evidence.append(
-            f"Results show conflicting professional fields ({', '.join(role_categories)}) under the same {input_type}, suggesting multiple distinct individuals."
-        )
+def signal_suspicious_source(evidence_list):
+    flagged = [e for e in evidence_list if e["source_type"] == "data_aggregator"]
+    if flagged:
+        return {
+            "id": "suspicious_source",
+            "label": "Suspicious or low-context source",
+            "points": 10,
+            "evidence": flagged[:2],
+            "reason": (
+                "One or more results come from data-aggregator style sites that compile contact "
+                "information from public sources — verify these independently before trusting them."
+            ),
+        }
+    return None
 
-    # Rule 6: Numeric-heavy handles (common in fake/bot accounts)
-    numeric_handles = [item for item in organic_results if has_numeric_heavy_handle(item.get("link", ""))]
-    if numeric_handles:
-        score += 1
-        evidence.append(
-            f"Found {len(numeric_handles)} profile handle(s) with an unusually high number of digits — a pattern more common in fake or bot-generated accounts."
-        )
 
-    if score <= 1:
-        level = "LOW"
-    elif score <= 3:
-        level = "MEDIUM"
-    else:
-        level = "HIGH"
+def signal_numeric_handle(evidence_list):
+    flagged = [e for e in evidence_list if _has_numeric_heavy_handle(e)]
+    if flagged:
+        return {
+            "id": "numeric_handle",
+            "label": "Numeric-heavy handle",
+            "points": 5,
+            "evidence": flagged[:2],
+            "reason": (
+                "One or more profile handles contain an unusually high number of digits, a pattern "
+                "more common in fake or auto-generated accounts."
+            ),
+        }
+    return None
 
-    if not evidence:
-        evidence.append("No significant risk indicators were detected in the available public results.")
 
-    return score, level, evidence
+def signal_spam_lookup_sources(evidence_list):
+    flagged = [e for e in evidence_list if e.get("source_type") == "spam_lookup"]
+    if len(flagged) >= 2:
+        return {
+            "id": "spam_lookup",
+            "label": "Low-quality lookup sites",
+            "points": 5,
+            "evidence": flagged[:2],
+            "reason": (
+                f"This contact appears mainly on {len(flagged)} auto-generated phone/data-lookup sites "
+                f"rather than genuine profiles — these often display fabricated or randomized names and "
+                f"should not be treated as reliable identity information."
+            ),
+        }
+    return None
+
+
+def _level_from_score(score):
+    if score <= 25:
+        return "LOW"
+    elif score <= 55:
+        return "MEDIUM"
+    return "HIGH"
+
+
+def calculate_risk(evidence_list, input_type, clusters=None, image_matches=None):
+    """
+    Runs every signal check and returns a structured, reproducible risk assessment:
+    {score, level, signals: [...], consistent_count, ambiguous_count}
+    """
+    signals = []
+    for check in [
+        lambda: signal_identity_inconsistency(clusters),
+        lambda: signal_multiple_conflicting_profiles(clusters),
+        lambda: signal_contact_inconsistency(evidence_list, input_type),
+        lambda: signal_image_reuse(image_matches),
+        lambda: signal_suspicious_source(evidence_list),
+        lambda: signal_numeric_handle(evidence_list),
+        lambda: signal_spam_lookup_sources(evidence_list),
+    ]:
+        result = check()
+        if result:
+            signals.append(result)
+
+    score = min(sum(s["points"] for s in signals), 100)
+    level = _level_from_score(score)
+
+    flagged_urls = {ev.get("url") for s in signals for ev in s["evidence"]}
+    total_items = len(evidence_list) if evidence_list else 0
+    consistent_count = max(total_items - len(flagged_urls), 0)
+    ambiguous_count = len(flagged_urls)
+
+    return {
+        "score": score,
+        "level": level,
+        "signals": signals,
+        "consistent_count": consistent_count,
+        "ambiguous_count": ambiguous_count,
+    }

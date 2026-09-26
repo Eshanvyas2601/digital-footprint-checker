@@ -34,6 +34,23 @@ def extract_handle(link):
     return match.group(1).lower() if match else None
 
 
+def is_profile_page(link):
+    """
+    Distinguishes an actual profile page (linkedin.com/in/username,
+    instagram.com/username) from a post/content page that merely mentions
+    someone (linkedin.com/posts/..., instagram.com/p/..., instagram.com/reel/...).
+    Only profile pages represent a genuine claimed identity.
+    """
+    link = link or ""
+    if re.search(r'linkedin\.com/(in|pub)/', link):
+        return True
+    if re.search(r'instagram\.com/[a-zA-Z0-9_.]+/?$', link) and "/p/" not in link and "/reel/" not in link:
+        return True
+    if re.search(r'facebook\.com/[a-zA-Z0-9_.]+/?$', link) and "/posts/" not in link and "/videos/" not in link:
+        return True
+    return False
+
+
 def _looks_like_spam_lookup_title(title):
     """
     Detects the common 'digit-string, Randomly Generated Company Name' pattern
@@ -85,6 +102,7 @@ def build_evidence(item):
         "snippet": snippet,
         "source_type": classify_source_type(domain, title),
         "handle": extract_handle(link),
+        "is_profile": is_profile_page(link),
         "detected_roles": detect_roles(text),
         "detected_locations": detect_locations(text),
         "query_source": item.get("query_source", "General"),
@@ -93,4 +111,4 @@ def build_evidence(item):
 
 def build_evidence_list(raw_results):
     """Converts a list of raw SerpApi results into structured Evidence objects."""
-    return [build_evidence(item) for item in raw_results]
+    return [build_evidence(item) for item in raw_results]   

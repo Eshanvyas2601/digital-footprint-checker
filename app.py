@@ -138,10 +138,11 @@ if st.button("Check Footprint"):
                 clusters = cluster_identities(evidence_list)
             with st.spinner("Scoring evidence..."):
                 risk = calculate_risk(evidence_list, "name", clusters=clusters)
+            profile_clusters = [c for c in clusters if any(e.get("is_profile") for e in c)]
             with st.spinner("Generating explanation..."):
                 narrative = generate_narrative(
                     input_type, input_value, risk,
-                    extra_context=f"There are {len(clusters)} likely distinct identity clusters found."
+                    extra_context=f"There are {len(profile_clusters)} likely distinct identity clusters found (based on actual profile pages, not third-party posts mentioning the name)."
                 )
             render_dashboard(input_type, input_value, risk, narrative, evidence_list)
 

@@ -7,13 +7,18 @@ which maps to a risk level via fixed thresholds. Gemini never decides the
 score — it only explains signals already calculated here.
 
 Scoring methodology (out of 100):
-  Identity inconsistency (conflicting roles, same name)        +25
-  Multiple conflicting profiles (3+ distinct clusters)          +15
-  Contact inconsistency (email/phone tied to differing names)  +20
-  Image reuse (photo found on 3+ unrelated domains)             +25
-  Suspicious / low-context source (data-aggregator domains)     +10
-  Numeric-heavy handle (pattern common in fake accounts)         +5
-  Low-quality lookup sites (auto-generated spam directories)     +5
+  Identity inconsistency (conflicting roles, same name, own profiles only) +25
+  Multiple conflicting profiles (3+ distinct profile clusters)             +15
+  Contact inconsistency (email/phone tied to differing names)             +20
+  Image reuse (photo found on 3+ unrelated domains)                        +25
+  Suspicious / low-context source (data-aggregator domains)                +10
+  Numeric-heavy handle (pattern common in fake accounts)                    +5
+  Low-quality lookup sites (auto-generated spam directories)                +5
+
+Note: role and profile-count signals only consider actual profile pages
+(e.g. linkedin.com/in/..., a person's own Instagram/Facebook page), not
+third-party posts or articles that merely mention the name — this avoids
+miscounting commentary about a person as a separate conflicting identity.
 
 Risk level thresholds: 0-25 LOW | 26-55 MEDIUM | 56+ HIGH
 """
@@ -24,6 +29,7 @@ from evidence_engine import build_evidence_list
 
 def _name_candidates(text):
     return set(re.findall(r'\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b', text or ""))
+
 
 
 def _has_numeric_heavy_handle(evidence):
@@ -40,7 +46,8 @@ def signal_identity_inconsistency(clusters):
     for cluster in clusters:
         roles = set()
         for ev in cluster:
-            roles |= ev.get("detected_roles", set())
+            if ev.get("is_profile"):
+                roles |= ev.get("detected_roles", set())
         if roles:
             role_sets.append((cluster, roles))
     if len(role_sets) < 2:
@@ -56,6 +63,7 @@ def signal_identity_inconsistency(clusters):
                     "points": 25,
                     "evidence": [cluster_a[0], cluster_b[0]],
                     "reason": (
+
                         f"Results tied to the same identity show conflicting professional fields "
                         f"({', '.join(roles_a)} vs {', '.join(roles_b)}), suggesting these are likely "
                         f"different individuals sharing the same name, not one person."
@@ -66,7 +74,7 @@ def signal_identity_inconsistency(clusters):
 
 def signal_multiple_conflicting_profiles(clusters):
     profile_clusters = [
-        c for c in clusters if any(e["source_type"] == "social_media" for e in c)
+        c for c in clusters if any(e.get("is_profile") for e in c)
     ] if clusters else []
     if len(profile_clusters) >= 3:
         return {
@@ -88,6 +96,7 @@ def signal_contact_inconsistency(evidence_list, input_type):
     name_sets = []
     for ev in evidence_list:
         if ev.get("source_type") == "spam_lookup":
+
             continue
         names = _name_candidates(f"{ev['title']} {ev['snippet']}")
         if names:
@@ -120,6 +129,7 @@ def signal_image_reuse(image_matches):
     domains.discard("")
     if len(domains) >= 3:
         return {
+
             "id": "image_reuse",
             "label": "Image reuse",
             "points": 25,
@@ -152,6 +162,7 @@ def signal_numeric_handle(evidence_list):
     flagged = [e for e in evidence_list if _has_numeric_heavy_handle(e)]
     if flagged:
         return {
+
             "id": "numeric_handle",
             "label": "Numeric-heavy handle",
             "points": 5,
@@ -184,6 +195,7 @@ def signal_spam_lookup_sources(evidence_list):
 def _level_from_score(score):
     if score <= 25:
         return "LOW"
+
     elif score <= 55:
         return "MEDIUM"
     return "HIGH"
@@ -215,6 +227,7 @@ def calculate_risk(evidence_list, input_type, clusters=None, image_matches=None)
     total_items = len(evidence_list) if evidence_list else 0
     consistent_count = max(total_items - len(flagged_urls), 0)
     ambiguous_count = len(flagged_urls)
+
 
     return {
         "score": score,

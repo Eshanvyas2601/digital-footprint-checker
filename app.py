@@ -8,6 +8,13 @@ from pdf_generator import generate_pdf_report
 
 st.set_page_config(page_title="DigitalTrace - Footprint Checker", page_icon="🔍")
 
+DISCLAIMER = (
+    "DigitalTrace does not determine whether a person is a scammer or a threat. "
+    "It identifies publicly observable signals — such as conflicting profiles or "
+    "reused images — that may warrant further verification. Always confirm identity "
+    "through an independent, trusted channel before acting on this report."
+)
+
 
 def parse_narrative(narrative_text):
     summary, actions = narrative_text, []
@@ -17,6 +24,8 @@ def parse_narrative(narrative_text):
         actions = [line.strip("- ").strip() for line in parts[1].strip().split("\n") if line.strip()]
     else:
         summary = narrative_text.replace("SUMMARY:", "").strip()
+    if not actions:
+        actions = ["Verify identity through an independent channel before trusting it."]
     return summary, actions
 
 
@@ -25,6 +34,7 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list):
 
     st.title("DigitalTrace")
     st.caption("Digital Identity Verification Report")
+    st.info(DISCLAIMER)
     st.write(f"**Input:** {input_value}")
     st.divider()
 
@@ -70,13 +80,11 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list):
     st.divider()
 
     st.subheader("Recommended actions")
-    for a in (actions or ["Verify identity through an independent channel before trusting it."]):
+    for a in actions:
         st.write(f"- {a}")
 
     pdf_bytes = generate_pdf_report(
-        input_type, input_value,
-        f"SUMMARY: {summary}\n\nRISK LEVEL: {risk['level']} (score: {risk['score']}/100)",
-        [{"title": ev["title"], "link": ev["url"], "snippet": ev["snippet"]} for ev in evidence_list[:15]]
+        input_type, input_value, risk, summary, actions, evidence_list
     )
     st.download_button(
         label="📄 Download DigitalTrace Report (PDF)",

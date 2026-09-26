@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 SOCIAL_DOMAINS = ["linkedin.com", "instagram.com", "facebook.com", "tiktok.com", "twitter.com", "x.com"]
 NEWS_KEYWORDS = ["news", "times", "hindustantimes", "bbc.", "cnn.", "reuters", "press"]
 AGGREGATOR_DOMAINS = ["unifers.ai", "bebee.com", "scribd.com", "internshala.com"]
-SPAM_LOOKUP_PATTERNS = ["blob.core.windows.net", "s3.us-east-1.amazonaws.com", "web.core.windows.net", "z-dqehpjab", ".z7.", ".z48."]
+SPAM_LOOKUP_PATTERNS = ["blob.core.windows.net", "s3.us-east-1.amazonaws.com", "web.core.windows.net", "z-dqehpjab", ".z7.", ".z48.", "s3-fips", "dualstack"]
 
 ROLE_KEYWORDS = {
     "finance": ["financial analyst", "accountant", "banker", "investment"],
@@ -34,8 +34,16 @@ def extract_handle(link):
     return match.group(1).lower() if match else None
 
 
-def classify_source_type(domain):
-    if any(p in domain for p in SPAM_LOOKUP_PATTERNS):
+def _looks_like_spam_lookup_title(title):
+    """
+    Detects the common 'digit-string, Randomly Generated Company Name' pattern
+    used by auto-generated phone/data-lookup spam pages, regardless of domain.
+    """
+    return bool(re.match(r'^\d{5,}[,\s]+[A-Z][a-zA-Z\s]+(Inc|LP|GmbH|AG|Sp\.|Tmi|LLC|Ltd|S\.A\.S|A/S)?\.?$', (title or "").strip()))
+
+
+def classify_source_type(domain, title=""):
+    if any(p in domain for p in SPAM_LOOKUP_PATTERNS) or _looks_like_spam_lookup_title(title):
         return "spam_lookup"
     if any(s in domain for s in SOCIAL_DOMAINS):
         return "social_media"
@@ -75,7 +83,7 @@ def build_evidence(item):
         "url": link,
         "domain": domain,
         "snippet": snippet,
-        "source_type": classify_source_type(domain),
+        "source_type": classify_source_type(domain, title),
         "handle": extract_handle(link),
         "detected_roles": detect_roles(text),
         "detected_locations": detect_locations(text),

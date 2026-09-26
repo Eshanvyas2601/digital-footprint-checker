@@ -30,6 +30,7 @@ def parse_narrative(narrative_text):
 
 
 def render_dashboard(input_type, input_value, risk, narrative, evidence_list):
+
     summary, actions = parse_narrative(narrative)
 
     st.title("DigitalTrace")
@@ -62,6 +63,7 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list):
     if not risk["signals"]:
         st.write("No specific risk signals were detected in the available public results.")
     else:
+
         for signal in risk["signals"]:
             with st.expander(f"⚠ {signal['label']} — {signal['points']} points ({len(signal['evidence'])} supporting source(s))"):
                 st.write(f"**Why was this flagged?** {signal['reason']}")
@@ -92,6 +94,7 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list):
         file_name=f"digitaltrace_report_{input_type}.pdf",
         mime="application/pdf"
     )
+
 
 
 st.title("🔍 DigitalTrace")
@@ -126,18 +129,28 @@ if st.button("Check Footprint"):
 
                 render_dashboard("image", "Uploaded photo", risk, narrative, evidence_list)
 
+
     elif input_type == "name":
         if not input_value.strip():
             st.warning("Please enter a name first.")
         else:
             with st.spinner("Running multi-query OSINT search..."):
                 results = multi_query_search(input_value)
+
             with st.spinner("Extracting evidence..."):
                 evidence_list = build_evidence_list(results)
+                name_lower = input_value.lower()
+                evidence_list = [
+                    ev for ev in evidence_list
+                    if name_lower in f"{ev['title']} {ev['snippet']}".lower()
+                ]
+
             with st.spinner("Clustering into likely identities..."):
                 clusters = cluster_identities(evidence_list)
+
             with st.spinner("Scoring evidence..."):
                 risk = calculate_risk(evidence_list, "name", clusters=clusters)
+
             profile_clusters = [c for c in clusters if any(e.get("is_profile") for e in c)]
             with st.spinner("Generating explanation..."):
                 narrative = generate_narrative(
@@ -149,6 +162,7 @@ if st.button("Check Footprint"):
     else:
         if not input_value.strip():
             st.warning("Please enter a value first.")
+
         else:
             with st.spinner("Searching public records..."):
                 query = build_targeted_query(input_value, input_type)

@@ -95,7 +95,7 @@ Spam-lookup detection is pattern-based and may not catch every low-quality sourc
 AI explanations depend on Gemini's availability. During periods of high demand, the app falls back to a raw evidence-based summary rather than a natural-language explanation, so the tool remains functional even if the AI layer is temporarily unavailable.
 Ethical Use
 
-This tool is designed strictly for self-verification and citizen awareness — checking your own digital footprint, or vetting a suspicious contact before you trust them. It is not intended for surveilling others without consent, and stores no data beyond a single search session.
+This tool is designed strictly for self-verification and citizen awareness — checking your own digital footprint, or vetting a suspicious contact before you trust them. It is not intended for surveilling others without consent. No search queries or results are stored beyond the active session, and API keys are supplied by the user and never logged or transmitted elsewhere.
 
 Tech Stack
 Python — core logic
@@ -112,6 +112,8 @@ identity_clustering.py   # Groups evidence into likely-distinct identities
 risk_scorer.py           # Deterministic, weighted, documented risk scoring (no AI)
 analyzer.py              # Gemini AI narrative generation, grounded in the calculated score
 pdf_generator.py         # PDF report export
+requirements.txt         # Python dependencies
+.env.example             # Template for required environment variables
 Setup Instructions
 Clone this repository:
    git clone https://github.com/Eshanvyas2601/digital-footprint-checker.git
@@ -121,8 +123,8 @@ Create and activate a virtual environment:
    venv\Scripts\activate
    source venv/bin/activate
 Install dependencies:
-   pip install streamlit requests python-dotenv google-genai cloudinary fpdf2
-Create a .env file in the project root with your own API keys:
+   pip install -r requirements.txt
+Copy .env.example to .env and fill in your own API keys:
    SERPAPI_KEY=your_serpapi_key_here
    GEMINI_API_KEY=your_gemini_key_here
    CLOUDINARY_CLOUD_NAME=your_cloud_name_here
@@ -135,6 +137,10 @@ Distinguishing suspicious image reuse from benign stock-photo reuse (e.g., check
 Heavier NLP for name/role detection to reduce false positives from headline-style text
 A confidence interval alongside the point score, reflecting evidence volume and quality
 Deployment as a public web app with rate-limited free usage
+License
+
+MIT License — see the LICENSE file for details.
+
 Author
 
 Built by Eshan Vyas for the SerpApi India Hackathon 2026.

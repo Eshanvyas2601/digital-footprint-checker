@@ -8,22 +8,36 @@ DISCLAIMER = (
     "through an independent, trusted channel before acting on this report."
 )
 
+DEMO_NOTICE = (
+    "DEMO REPORT - FABRICATED SAMPLE DATA. The names, profiles, and links in this report are "
+    "entirely fabricated. Real identities cannot be shown in this demonstration for privacy "
+    "reasons. Any resemblance to a real person is coincidental."
+)
+
 
 def _clean(text):
     return (text or "").encode("latin-1", "replace").decode("latin-1")
 
 
-def generate_pdf_report(input_type, input_value, risk, summary, actions, evidence_list):
+def generate_pdf_report(input_type, input_value, risk, summary, actions, evidence_list, demo_mode=False):
     pdf = FPDF()
     pdf.add_page()
 
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "DigitalTrace - Digital Identity Verification Report", ln=True)
 
+    if demo_mode:
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(180, 0, 0)
+        pdf.multi_cell(0, 6, _clean(DEMO_NOTICE), wrapmode="CHAR")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(2)
+
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(0, 8, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True)
     pdf.cell(0, 8, f"Search type: {input_type}", ln=True)
-    pdf.cell(0, 8, f"Input: {_clean(input_value)}", ln=True)
+    input_label = f"{_clean(input_value)} (fabricated demo name)" if demo_mode else _clean(input_value)
+    pdf.cell(0, 8, f"Input: {input_label}", ln=True)
     pdf.ln(4)
 
     pdf.set_font("Helvetica", "B", 13)
@@ -58,7 +72,7 @@ def generate_pdf_report(input_type, input_value, risk, summary, actions, evidenc
     pdf.ln(2)
 
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, "Sources", ln=True)
+    pdf.cell(0, 10, "Sources (fictional placeholders)" if demo_mode else "Sources", ln=True)
     pdf.set_font("Helvetica", "", 9)
     seen = set()
     for ev in evidence_list[:15]:

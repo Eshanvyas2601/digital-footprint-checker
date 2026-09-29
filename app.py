@@ -25,6 +25,7 @@ DEMO_NOTICE = (
 )
 
 BANNER_PATH = "assets/banner.png"
+PLATFORM_ORDER = ["LinkedIn", "Instagram", "Facebook", "News/Articles", "Other/General"]
 
 
 def _get_banner_base64():
@@ -38,44 +39,48 @@ st.markdown(
     """
     <style>
     .dt-header {
-        position: relative;
-        border-radius: 16px;
-        overflow: hidden;
-        margin-bottom: 24px;
-        border: 1px solid #1f6b3a;
-        min-height: 140px;
-        display: flex;
-        align-items: center;
+        position: relative; border-radius: 16px; overflow: hidden; margin-bottom: 24px;
+        border: 1px solid #1f6b3a; min-height: 140px; display: flex; align-items: center;
         background: #04150a;
     }
-    .dt-header-bg {
-        position: absolute;
-        inset: 0;
-        background-size: cover;
-        background-position: center;
-        opacity: 0.35;
+    .dt-header-bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0.35; }
+    .dt-header-overlay { position: absolute; inset: 0; background: linear-gradient(120deg, rgba(4,21,10,0.95) 30%, rgba(13,43,26,0.75) 100%); }
+    .dt-header-content { position: relative; z-index: 1; padding: 28px 32px; }
+    .dt-header-content h1 { color: #4be37f; font-size: 2.2rem; margin: 0 0 6px 0; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+    .dt-header-content p { color: #cdeed8; margin: 0; font-size: 1.02rem; }
+
+    .dt-card {
+        background: #12161c; border: 1px solid #262c36; border-radius: 14px;
+        padding: 18px 20px; height: 100%;
     }
-    .dt-header-overlay {
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(120deg, rgba(4,21,10,0.95) 30%, rgba(13,43,26,0.75) 100%);
+    .dt-card-label { color: #9aa4b2; font-size: 0.85rem; margin-bottom: 6px; }
+    .dt-card-value { font-size: 2.0rem; font-weight: 700; color: #eef2f6; }
+
+    .dt-donut-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+    .dt-donut {
+        width: 160px; height: 160px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 12px;
     }
-    .dt-header-content {
-        position: relative;
-        z-index: 1;
-        padding: 28px 32px;
+    .dt-donut-inner {
+        width: 128px; height: 128px; border-radius: 50%; background: #0b0e12;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
-    .dt-header-content h1 {
-        color: #4be37f;
-        font-size: 2.2rem;
-        margin: 0 0 6px 0;
-        text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    .dt-donut-score { font-size: 2.1rem; font-weight: 800; color: #f2f5f7; line-height: 1; }
+    .dt-donut-sub { font-size: 0.78rem; color: #9aa4b2; margin-top: 2px; }
+    .dt-level-pill {
+        padding: 6px 16px; border-radius: 999px; font-weight: 600; font-size: 0.9rem;
+        display: inline-block;
     }
-    .dt-header-content p {
-        color: #cdeed8;
-        margin: 0;
-        font-size: 1.02rem;
+
+    .dt-badge {
+        display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
+        border-radius: 999px; font-size: 0.9rem; margin: 4px 6px 4px 0;
     }
+    .dt-badge-found { background: rgba(46, 196, 143, 0.12); border: 1px solid #2ec48f; color: #6fe3bd; }
+    .dt-badge-missing { background: #171b21; border: 1px solid #2a303a; color: #6b7480; }
+
+    .dt-footer-note { color: #7a828e; font-size: 0.85rem; text-align: center; margin-top: 8px; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -112,6 +117,65 @@ def parse_narrative(narrative_text):
     return summary, actions
 
 
+def _level_colors(level):
+    return {
+        "LOW": ("#2ec48f", "rgba(46,196,143,0.15)", "#6fe3bd"),
+        "MEDIUM": ("#e6a23c", "rgba(230,162,60,0.15)", "#f0c27b"),
+        "HIGH": ("#e05656", "rgba(224,86,86,0.15)", "#f29a9a"),
+    }.get(level, ("#2ec48f", "rgba(46,196,143,0.15)", "#6fe3bd"))
+
+
+def render_score_donut(score, level):
+    ring_color, pill_bg, pill_text = _level_colors(level)
+    angle = min(max(score, 0), 100) * 3.6
+    st.markdown(
+        f"""
+        <div class="dt-donut-wrap">
+            <div class="dt-donut" style="background: conic-gradient({ring_color} {angle}deg, #262c36 {angle}deg);">
+                <div class="dt-donut-inner">
+                    <div class="dt-donut-score">{score}</div>
+                    <div class="dt-donut-sub">out of 100</div>
+                </div>
+            </div>
+            <span class="dt-level-pill" style="background:{pill_bg}; color:{pill_text};">{level} exposure</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_metric_card(label, value):
+    st.markdown(
+        f"""
+        <div class="dt-card">
+            <div class="dt-card-label">{label}</div>
+            <div class="dt-card-value">{value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_platform_presence(evidence_list):
+    present = {source: False for source in PLATFORM_ORDER}
+    for ev in evidence_list:
+        src = ev.get("query_source")
+        if src in present:
+            present[src] = True
+
+    st.markdown('<div class="dt-card">', unsafe_allow_html=True)
+    st.markdown('<div class="dt-card-label" style="margin-bottom:12px;">Platform presence</div>', unsafe_allow_html=True)
+    badges_html = ""
+    for platform in PLATFORM_ORDER:
+        label = platform.replace("/Articles", "").replace("/General", "")
+        if present[platform]:
+            badges_html += f'<span class="dt-badge dt-badge-found">✓ {label}</span>'
+        else:
+            badges_html += f'<span class="dt-badge dt-badge-missing">{label}, not found</span>'
+    st.markdown(badges_html, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_dashboard(input_type, input_value, risk, narrative, evidence_list, demo_mode=False, clusters=None):
     summary, actions = parse_narrative(narrative)
 
@@ -124,24 +188,35 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
         st.write(f"**Input:** {input_value} *(fabricated demo name)*")
     else:
         st.write(f"**Input:** {input_value}")
-    st.divider()
+    st.write("")
 
-    level_icon = {"LOW": "🟢", "MEDIUM": "🟠", "HIGH": "🔴"}
-    st.subheader("Overall exposure")
-    st.markdown(f"### {level_icon.get(risk['level'], '')} {risk['level']} — {risk['score']} / 100")
-    st.progress(min(risk['score'], 100) / 100)
+    col_donut, col_grid = st.columns([1, 1.4])
+    with col_donut:
+        render_score_donut(risk["score"], risk["level"])
+    with col_grid:
+        r1c1, r1c2 = st.columns(2)
+        with r1c1:
+            render_metric_card("Sources checked", len(evidence_list))
+        with r1c2:
+            render_metric_card("Signals detected", len(risk["signals"]))
+        st.write("")
+        r2c1, r2c2 = st.columns(2)
+        with r2c1:
+            render_metric_card("Consistent references", risk["consistent_count"])
+        with r2c2:
+            render_metric_card("Needs verification", risk["ambiguous_count"])
+
+    st.write("")
     st.caption(
         "This score measures how easily this identity could be confused with others online, "
-        "or how exposed its public information is — it is not a judgment of danger or wrongdoing."
+        "or how exposed its public information is — it is not a judgment of danger or wrongdoing. "
+        "\"Needs verification\" means results involved in a flagged signal, not proof of a problem on their own."
     )
     st.divider()
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("⚠ Signals detected", len(risk["signals"]))
-    c2.metric("✓ Consistent references", risk["consistent_count"])
-    c3.metric("ℹ Needs verification", risk["ambiguous_count"])
-    st.caption("\"Needs verification\" = results involved in a flagged signal, not proof of a problem on their own.")
-    st.divider()
+    if input_type == "name" and not demo_mode:
+        render_platform_presence(evidence_list)
+        st.divider()
 
     st.subheader("Summary")
     st.write(summary)
@@ -184,18 +259,24 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
             seen.add(ev["url"])
     st.divider()
 
-    st.subheader("Recommended actions")
+    st.subheader("What to do next")
     for a in actions:
-        st.write(f"- {a}")
+        st.write(f"☐ {a}")
 
+    st.write("")
     pdf_bytes = generate_pdf_report(
         input_type, input_value, risk, summary, actions, evidence_list, demo_mode=demo_mode
     )
     st.download_button(
-        label="📄 Download DigitalTrace Report (PDF)",
+        label="📄 Download PDF report",
         data=pdf_bytes,
         file_name=f"digitaltrace_report_{input_type}{'_DEMO' if demo_mode else ''}.pdf",
-        mime="application/pdf"
+        mime="application/pdf",
+        use_container_width=False,
+    )
+    st.markdown(
+        '<div class="dt-footer-note">Based on public search results only. Not proof of identity or wrongdoing.</div>',
+        unsafe_allow_html=True,
     )
 
 

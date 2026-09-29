@@ -7,6 +7,13 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY)
 MODELS_TO_TRY = ["gemini-3.6-flash"]
+MAX_ATTEMPTS = 4
+
+
+def _is_retryable(error):
+    """Only overload / rate-limit errors are worth retrying. Anything else fails fast."""
+    text = str(error)
+    return any(code in text for code in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED"))
 
 
 def generate_narrative(input_type, input_value, risk, extra_context=""):
@@ -49,13 +56,16 @@ RECOMMENDED ACTIONS:
 """
 
     for model_name in MODELS_TO_TRY:
-        for attempt in range(6):
+        for attempt in range(MAX_ATTEMPTS):
             try:
                 response = client.models.generate_content(model=model_name, contents=prompt)
                 return response.text
             except Exception as e:
                 print(f"Model {model_name}, attempt {attempt + 1} failed: {e}")
-                time.sleep(10)
+                if not _is_retryable(e):
+                    break
+                if attempt < MAX_ATTEMPTS - 1:
+                    time.sleep(2 * (2 ** attempt))  # waits 2s, 4s, 8s
 
     return (
         f"SUMMARY: Unable to generate an AI explanation right now, but the evidence-based "

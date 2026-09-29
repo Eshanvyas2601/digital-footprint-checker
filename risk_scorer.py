@@ -26,10 +26,21 @@ Risk level thresholds: 0-25 LOW | 26-55 MEDIUM | 56+ HIGH
 import re
 from evidence_engine import build_evidence_list
 
+ROLE_KEYWORDS = {
+    "finance": ["financial analyst", "accountant", "banker", "investment"],
+    "engineering": ["engineer", "developer", "commissioning", "technician"],
+    "student": ["student", "university", "college", "ambassador"],
+    "creative": ["author", "writer", "artist", "actor", "kindle", "singer", "comedian", "podcast"],
+    "consultant": ["consultant", "advisor"],
+    "leadership": ["founder", "co-founder", "ceo", "chairman", "president", "director"],
+    "law_enforcement": ["dcp", "police", "ips", "inspector", "commissioner"],
+    "research": ["ieee", "researcher", "phd", "professor"],
+    "other_media": ["imdb", "tiktok", "medium"],
+}
+
 
 def _name_candidates(text):
     return set(re.findall(r'\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b', text or ""))
-
 
 
 def _has_numeric_heavy_handle(evidence):
@@ -63,7 +74,6 @@ def signal_identity_inconsistency(clusters):
                     "points": 25,
                     "evidence": [cluster_a[0], cluster_b[0]],
                     "reason": (
-
                         f"Results tied to the same identity show conflicting professional fields "
                         f"({', '.join(roles_a)} vs {', '.join(roles_b)}), suggesting these are likely "
                         f"different individuals sharing the same name, not one person."
@@ -96,7 +106,6 @@ def signal_contact_inconsistency(evidence_list, input_type):
     name_sets = []
     for ev in evidence_list:
         if ev.get("source_type") == "spam_lookup":
-
             continue
         names = _name_candidates(f"{ev['title']} {ev['snippet']}")
         if names:
@@ -129,7 +138,6 @@ def signal_image_reuse(image_matches):
     domains.discard("")
     if len(domains) >= 3:
         return {
-
             "id": "image_reuse",
             "label": "Image reuse",
             "points": 25,
@@ -162,7 +170,6 @@ def signal_numeric_handle(evidence_list):
     flagged = [e for e in evidence_list if _has_numeric_heavy_handle(e)]
     if flagged:
         return {
-
             "id": "numeric_handle",
             "label": "Numeric-heavy handle",
             "points": 5,
@@ -195,7 +202,6 @@ def signal_spam_lookup_sources(evidence_list):
 def _level_from_score(score):
     if score <= 25:
         return "LOW"
-
     elif score <= 55:
         return "MEDIUM"
     return "HIGH"
@@ -227,7 +233,6 @@ def calculate_risk(evidence_list, input_type, clusters=None, image_matches=None)
     total_items = len(evidence_list) if evidence_list else 0
     consistent_count = max(total_items - len(flagged_urls), 0)
     ambiguous_count = len(flagged_urls)
-
 
     return {
         "score": score,

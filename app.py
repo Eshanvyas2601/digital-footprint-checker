@@ -11,24 +11,24 @@ from risk_scorer import calculate_risk
 from analyzer import generate_narrative
 from pdf_generator import generate_pdf_report
 from demo_data import get_demo_results
-
+ 
 st.set_page_config(page_title="DigitalTrace - Footprint Checker", page_icon="🔍", layout="wide")
-
+ 
 DISCLAIMER = (
     "DigitalTrace does not determine whether a person is a scammer or a threat. "
     "It identifies publicly observable signals — such as conflicting profiles or "
     "reused images — that may warrant further verification. Always confirm identity "
     "through an independent, trusted channel before acting on this report."
 )
-
+ 
 DEMO_NOTICE = (
     "<strong>DEMO MODE — FABRICATED DATA.</strong> The names, profiles, and links in this report are entirely "
     "fabricated. Real identities cannot be shown in this demonstration for privacy reasons. "
     "Any resemblance to a real person is coincidental."
 )
-
+ 
 BANNER_PATH = "assets/banner.png"
-
+ 
 # (query_source key from the backend, label shown, icon). GitHub has no dedicated query source,
 # so it is detected from result URLs instead (see render_platform_presence).
 PLATFORM_DISPLAY = [
@@ -39,17 +39,17 @@ PLATFORM_DISPLAY = [
     ("News/Articles", "News", "doc"),
     ("Other/General", "Web", "web"),
 ]
-
+ 
 PLACEHOLDERS = {
     "Name": "Enter a full name",
     "Email": "Enter an email address",
     "Phone": "Enter a phone number",
 }
-
+ 
 if "history" not in st.session_state:
     st.session_state.history = []
-
-
+ 
+ 
 # ----------------------------------------------------------------------------
 # Icons
 # ----------------------------------------------------------------------------
@@ -73,8 +73,8 @@ ICONS = {
     "alert": ("<path d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/>", "stroke"),
     "info": ("<circle cx='12' cy='12' r='10'/><line x1='12' y1='16' x2='12' y2='12'/><line x1='12' y1='8' x2='12.01' y2='8'/>", "stroke"),
 }
-
-
+ 
+ 
 def icon(name, size=18):
     inner, mode = ICONS[name]
     if mode == "fill":
@@ -85,8 +85,8 @@ def icon(name, size=18):
         f"<svg class='dt-ico' width='{size}' height='{size}' viewBox='0 0 24 24' {attrs} "
         f"xmlns='http://www.w3.org/2000/svg'>{inner}</svg>"
     )
-
-
+ 
+ 
 def _svg_uri(name, stroke="#000000"):
     """Data-URI version of a stroke icon, used from CSS (search-bar icon, pill icons)."""
     inner, _ = ICONS[name]
@@ -95,8 +95,8 @@ def _svg_uri(name, stroke="#000000"):
         f"stroke='{stroke}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>{inner}</svg>"
     )
     return 'url("data:image/svg+xml;utf8,' + quote(svg) + '")'
-
-
+ 
+ 
 # ----------------------------------------------------------------------------
 # HTML helper — this is the fix for the raw <div> code showing on screen.
 # Markdown treats any line indented 4+ spaces as a code block, and f-string
@@ -106,22 +106,22 @@ def _svg_uri(name, stroke="#000000"):
 def render_html(markup: str):
     cleaned = "\n".join(line.strip() for line in markup.splitlines() if line.strip())
     st.markdown(cleaned, unsafe_allow_html=True)
-
-
+ 
+ 
 def _get_banner_base64():
     if not os.path.exists(BANNER_PATH):
         return None
     with open(BANNER_PATH, "rb") as f:
         return base64.b64encode(f.read()).decode()
-
-
+ 
+ 
 # ----------------------------------------------------------------------------
 # Theme
 # ----------------------------------------------------------------------------
 THEME_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
+ 
 :root {
     --dt-text: #e6eaf5;
     --dt-muted: #8b93b0;
@@ -131,7 +131,7 @@ THEME_CSS = """
     --dt-purple-soft: #c4b5fd;
     --dt-border: rgba(148,163,255,0.14);
 }
-
+ 
 /* ---------- Page background: navy/charcoal, faint blue-purple gradient, soft radial glow ---------- */
 .stApp {
     background:
@@ -145,7 +145,7 @@ THEME_CSS = """
 [data-testid="stHeader"] { background: transparent; }
 [data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu, footer { display: none !important; }
 [data-testid="stMainBlockContainer"], .block-container { max-width: 1120px; padding-top: 1.2rem; padding-bottom: 3rem; }
-
+ 
 .stApp, .stApp p, .stApp li, .stApp label, .stApp button, .stApp input, .stApp textarea,
 .stApp h1, .stApp h2, .stApp h3, .stApp h4 {
     font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif !important;
@@ -153,7 +153,7 @@ THEME_CSS = """
 .stApp h2, .stApp h3 { letter-spacing: -0.01em; font-weight: 700; color: var(--dt-text); }
 .stApp hr { border-color: rgba(148,163,255,0.12); }
 [data-testid="stCaptionContainer"] { color: var(--dt-muted); }
-
+ 
 /* ---------- Glass surfaces ---------- */
 .dt-glass, .dt-card, .dt-panel, .dt-trust-item, .dt-step {
     background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
@@ -166,7 +166,7 @@ THEME_CSS = """
 .dt-panel { border-radius: 18px; padding: 20px 22px; margin-bottom: 14px; }
 .dt-panel-title { color: var(--dt-text); font-weight: 700; font-size: 1.02rem; margin-bottom: 14px; }
 .dt-ico { display: block; flex-shrink: 0; }
-
+ 
 /* ---------- Top navigation ---------- */
 .dt-nav {
     display: flex; align-items: center; justify-content: space-between;
@@ -187,7 +187,7 @@ THEME_CSS = """
 }
 .dt-nav-links a:hover { color: var(--dt-text) !important; background: rgba(255,255,255,0.05); }
 .dt-nav-links a.active { color: var(--dt-cyan-soft) !important; background: rgba(56,189,248,0.10); }
-
+ 
 /* ---------- Hero ---------- */
 .dt-hero { position: relative; text-align: center; padding: 46px 0 22px 0; }
 .dt-hero::before {
@@ -213,7 +213,7 @@ THEME_CSS = """
 .dt-hero-compact h1 { font-size: 1.7rem; }
 .dt-hero-compact h1 span, .dt-hero-compact br { display: none; }
 .dt-hero-compact::before { height: 160px; }
-
+ 
 /* ---------- Search bar ---------- */
 [data-testid="stTextInput"] [data-baseweb="input"] {
     background: rgba(255,255,255,0.045) !important;
@@ -233,12 +233,12 @@ THEME_CSS = """
     background-image: __ICON_SEARCH__; background-repeat: no-repeat; background-position: 18px center; background-size: 20px 20px;
 }
 [data-testid="stTextInput"] input::placeholder { color: #6b7594; opacity: 1; }
-
+ 
 [data-testid="stFileUploader"] section {
     background: rgba(255,255,255,0.04); border: 1px dashed rgba(148,163,255,0.30); border-radius: 16px;
 }
 [data-testid="stFileUploader"] section:hover { border-color: rgba(56,189,248,0.6); }
-
+ 
 /* ---------- Type pills (radio restyled) ---------- */
 [data-testid="stRadio"] > div { justify-content: center; }
 div[role="radiogroup"] { justify-content: center; gap: 10px; }
@@ -263,7 +263,7 @@ div[role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {
 }
 div[role="radiogroup"] label[data-baseweb="radio"]:has(input:checked)::before { background-color: var(--dt-cyan-soft); }
 div[role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) p { color: #e0f2fe; }
-
+ 
 /* ---------- Buttons ---------- */
 [data-testid="stButton"] { display: flex; justify-content: center; }
 button[kind="primary"], button[data-testid="stBaseButton-primary"] {
@@ -281,16 +281,16 @@ button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover {
     color: #ddd6fe !important; border-radius: 12px !important; font-weight: 600;
 }
 [data-testid="stDownloadButton"] button:hover { border-color: rgba(56,189,248,0.6) !important; color: #e0f2fe !important; }
-
+ 
 [data-testid="stCheckbox"], [data-testid="stToggle"] { display: flex; justify-content: center; }
 [data-testid="stCheckbox"] p, [data-testid="stToggle"] p { color: var(--dt-muted); font-size: 0.86rem; }
-
+ 
 /* ---------- Expanders ---------- */
 [data-testid="stExpander"] details {
     background: rgba(255,255,255,0.035); border: 1px solid var(--dt-border) !important; border-radius: 14px !important;
 }
 [data-testid="stExpander"] summary:hover { color: var(--dt-cyan-soft); }
-
+ 
 /* ---------- Notices ---------- */
 .dt-notice {
     display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; margin: 10px 0; border-radius: 14px;
@@ -301,12 +301,12 @@ button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover {
 .dt-notice-warn   { background: rgba(245,183,74,0.08);  border-color: rgba(245,183,74,0.30);  color: #fcd9a0; }
 .dt-notice-danger { background: rgba(251,113,133,0.08); border-color: rgba(251,113,133,0.30); color: #fecdd3; }
 .dt-notice-demo   { background: rgba(139,92,246,0.10);  border-color: rgba(139,92,246,0.38);  color: #ddd6fe; }
-
+ 
 /* ---------- Landing: platforms, trust, steps ---------- */
 .dt-platforms { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 30px; margin-top: 34px; }
 .dt-platform { display: flex; align-items: center; gap: 8px; color: var(--dt-muted); font-size: 0.9rem; font-weight: 500; transition: color .15s; }
 .dt-platform:hover { color: var(--dt-cyan-soft); }
-
+ 
 .dt-trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 30px; }
 .dt-trust-item { display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; }
 .dt-trust-icon {
@@ -315,7 +315,7 @@ button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover {
 }
 .dt-trust-title { color: var(--dt-text); font-weight: 600; font-size: 0.93rem; }
 .dt-trust-desc { color: var(--dt-muted); font-size: 0.82rem; margin-top: 3px; line-height: 1.45; }
-
+ 
 .dt-section-title { color: var(--dt-text); font-weight: 700; font-size: 1.05rem; margin: 40px 0 14px 0; }
 .dt-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
 .dt-step { border-radius: 14px; padding: 16px; }
@@ -325,7 +325,7 @@ button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover {
 }
 .dt-step-title { color: var(--dt-text); font-weight: 600; font-size: 0.92rem; }
 .dt-step-desc { color: var(--dt-muted); font-size: 0.8rem; margin-top: 4px; line-height: 1.45; }
-
+ 
 /* ---------- Report ---------- */
 .dt-report-title { color: #f3f6ff; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; margin: 26px 0 4px 0; }
 .dt-input-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--dt-muted); font-size: 0.92rem; margin: 6px 0 14px 0; }
@@ -333,12 +333,12 @@ button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover {
 .dt-tag { padding: 2px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; border: 1px solid; }
 .dt-tag-demo { background: rgba(139,92,246,0.16); color: #ddd6fe; border-color: rgba(139,92,246,0.40); }
 .dt-tag-live { background: rgba(56,189,248,0.12); color: #bae6fd; border-color: rgba(56,189,248,0.32); }
-
+ 
 .dt-card { padding: 18px 20px; height: 100%; }
 .dt-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--dt-cyan-soft); }
 .dt-card-label { color: var(--dt-muted); font-size: 0.85rem; }
 .dt-card-value { font-size: 2.3rem; font-weight: 800; color: #f3f6ff; line-height: 1.1; font-variant-numeric: tabular-nums; }
-
+ 
 .dt-donut-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 24px 16px; }
 .dt-donut { width: 172px; height: 172px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
 .dt-donut-inner {
@@ -348,33 +348,33 @@ button[kind="primary"]:hover, button[data-testid="stBaseButton-primary"]:hover {
 .dt-donut-score { font-size: 3.1rem; font-weight: 800; color: #ffffff; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; text-shadow: 0 0 24px rgba(125,211,252,0.35); }
 .dt-donut-sub { font-size: 0.74rem; color: var(--dt-muted); margin-top: 4px; }
 .dt-level-pill { padding: 6px 16px; border-radius: 999px; font-weight: 600; font-size: 0.88rem; display: inline-block; }
-
+ 
 .dt-badges { display: flex; flex-wrap: wrap; gap: 8px; }
 .dt-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; font-size: 0.86rem; font-weight: 500; }
 .dt-badge-state { font-size: 0.74rem; opacity: 0.8; }
 .dt-badge-found { background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.40); color: #bae6fd; }
 .dt-badge-missing { background: rgba(255,255,255,0.03); border: 1px solid rgba(148,163,255,0.14); color: #6b7594; }
-
+ 
 .dt-history-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 0; border-bottom: 1px solid rgba(148,163,255,0.10); }
 .dt-history-row:last-child { border-bottom: none; }
 .dt-history-name { color: var(--dt-text); font-size: 0.92rem; font-weight: 600; }
 .dt-history-meta { display: flex; align-items: center; gap: 8px; color: var(--dt-muted); font-size: 0.78rem; margin-top: 4px; }
 .dt-history-score { font-weight: 700; font-size: 0.85rem; padding: 4px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
 .dt-empty { color: var(--dt-muted); font-size: 0.86rem; }
-
+ 
 .dt-footer-note { color: #6b7594; font-size: 0.82rem; text-align: center; margin-top: 12px; line-height: 1.5; }
 .dt-footer { margin-top: 48px; padding-top: 22px; border-top: 1px solid rgba(148,163,255,0.10); }
 .dt-footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
 .dt-footer-title { color: var(--dt-text); font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; }
 .dt-footer-block p { color: var(--dt-muted); font-size: 0.85rem; line-height: 1.6; margin: 0; }
-
+ 
 @media (max-width: 720px) {
     .dt-hero h1 { font-size: 2rem; }
     .dt-nav-links a { padding: 6px 9px; }
 }
 </style>
 """
-
+ 
 THEME_CSS = (
     THEME_CSS
     .replace("__ICON_SEARCH__", _svg_uri("search", "#94a3b8"))
@@ -383,10 +383,10 @@ THEME_CSS = (
     .replace("__ICON_PHONE__", _svg_uri("phone"))
     .replace("__ICON_IMAGE__", _svg_uri("image"))
 )
-
+ 
 st.markdown(THEME_CSS, unsafe_allow_html=True)
-
-
+ 
+ 
 # ----------------------------------------------------------------------------
 # Shared header / notices
 # ----------------------------------------------------------------------------
@@ -402,8 +402,8 @@ def render_nav():
         </div>
     </div>
     """)
-
-
+ 
+ 
 def render_hero(compact=False):
     banner_b64 = _get_banner_base64()
     bg_style = f"background-image: url('data:image/png;base64,{banner_b64}');" if banner_b64 else ""
@@ -419,8 +419,8 @@ def render_hero(compact=False):
         {extra}
     </div>
     """)
-
-
+ 
+ 
 def render_notice(message_html, kind="info"):
     icon_name = "info" if kind in ("info", "demo") else "alert"
     render_html(
@@ -429,8 +429,8 @@ def render_notice(message_html, kind="info"):
         f'<div>{message_html}</div>'
         '</div>'
     )
-
-
+ 
+ 
 # ----------------------------------------------------------------------------
 # Landing sections
 # ----------------------------------------------------------------------------
@@ -441,8 +441,8 @@ def render_platform_strip():
     ]
     chips = "".join(f'<div class="dt-platform">{icon(n, 18)}<span>{label}</span></div>' for n, label in items)
     render_html(f'<div class="dt-platforms">{chips}</div>')
-
-
+ 
+ 
 def render_trust_row():
     items = [
         ("doc", "Evidence-backed analysis", "Every flag links to the exact source that triggered it."),
@@ -456,8 +456,8 @@ def render_trust_row():
         for n, title, desc in items
     )
     render_html(f'<div class="dt-trust">{cells}</div>')
-
-
+ 
+ 
 def render_how_it_works():
     steps = [
         ("1", "Enter details", "Provide a name, email, phone, or photo."),
@@ -471,8 +471,8 @@ def render_how_it_works():
         for num, title, desc in steps
     )
     render_html(f'<div class="dt-section-title">How it works</div><div class="dt-steps">{cells}</div>')
-
-
+ 
+ 
 # ----------------------------------------------------------------------------
 # Report pieces
 # ----------------------------------------------------------------------------
@@ -487,8 +487,8 @@ def parse_narrative(narrative_text):
     if not actions:
         actions = ["Verify identity through an independent channel before trusting it."]
     return summary, actions
-
-
+ 
+ 
 def _level_colors(level):
     # (ring colour, pill background, pill text)
     return {
@@ -496,8 +496,8 @@ def _level_colors(level):
         "MEDIUM": ("#f5b74a", "rgba(245,183,74,0.14)", "#fcd48a"),
         "HIGH": ("#fb7185", "rgba(251,113,133,0.14)", "#fda4af"),
     }.get(level, ("#38bdf8", "rgba(56,189,248,0.14)", "#7dd3fc"))
-
-
+ 
+ 
 def render_score_donut(score, level):
     ring_color, pill_bg, pill_text = _level_colors(level)
     angle = min(max(score, 0), 100) * 3.6
@@ -512,16 +512,16 @@ def render_score_donut(score, level):
         <span class="dt-level-pill" style="background:{pill_bg}; color:{pill_text};">{level} exposure</span>
     </div>
     """)
-
-
+ 
+ 
 def render_metric_card(label, value, icon_name):
     render_html(
         f'<div class="dt-card"><div class="dt-card-top">{icon(icon_name, 16)}'
         f'<span class="dt-card-label">{label}</span></div>'
         f'<div class="dt-card-value">{value}</div></div>'
     )
-
-
+ 
+ 
 def render_platform_presence(evidence_list):
     present = {key: False for key, _, _ in PLATFORM_DISPLAY}
     for ev in evidence_list:
@@ -530,22 +530,22 @@ def render_platform_presence(evidence_list):
             present[src] = True
         if "github.com" in (ev.get("url") or "").lower():
             present["GitHub"] = True
-
+ 
     badges = ""
     for key, label, icon_name in PLATFORM_DISPLAY:
         if present[key]:
             badges += f'<span class="dt-badge dt-badge-found">{icon(icon_name, 16)}<span>{label}</span><span class="dt-badge-state">Found</span></span>'
         else:
             badges += f'<span class="dt-badge dt-badge-missing">{icon(icon_name, 16)}<span>{label}</span><span class="dt-badge-state">Not found</span></span>'
-
+ 
     render_html(
         '<div class="dt-panel">'
         '<div class="dt-panel-title">Platform presence</div>'
         f'<div class="dt-badges">{badges}</div>'
         '</div>'
     )
-
-
+ 
+ 
 def render_recent_searches():
     if not st.session_state.history:
         return
@@ -567,8 +567,8 @@ def render_recent_searches():
         '<div class="dt-section-title">Recent searches</div>'
         '<div class="dt-panel">' + "".join(rows) + '</div>'
     )
-
-
+ 
+ 
 def render_footer():
     render_html(f"""
     <div class="dt-footer">
@@ -585,26 +585,50 @@ def render_footer():
         <div class="dt-footer-note">{DISCLAIMER}</div>
     </div>
     """)
-
-
+ 
+ 
+def pdf_download_button(pdf_bytes, file_name, key):
+    """PDF download button. on_click="ignore" stops Streamlit rerunning the page when it is
+    clicked (which would wipe the report from the screen); older Streamlit versions fall back."""
+    kwargs = dict(
+        label="📄 Download PDF report", data=pdf_bytes, file_name=file_name,
+        mime="application/pdf", key=key,
+    )
+    try:
+        st.download_button(on_click="ignore", **kwargs)
+    except TypeError:
+        st.download_button(**kwargs)
+ 
+ 
 def render_dashboard(input_type, input_value, risk, narrative, evidence_list, demo_mode=False, clusters=None):
     summary, actions = parse_narrative(narrative)
-
+ 
     st.session_state.history.append({
         "input": input_value, "type": input_type, "score": risk["score"],
         "level": risk["level"], "demo": demo_mode, "time": datetime.now().strftime("%d %b, %H:%M"),
     })
-
-    render_html('<div class="dt-report-title">Identity verification report</div>')
+ 
+    # Build the PDF once, up front, so the download button can sit at the TOP of the report
+    # (visible the moment results appear) and again at the bottom.
+    pdf_bytes = generate_pdf_report(input_type, input_value, risk, summary, actions, evidence_list, demo_mode=demo_mode)
+    pdf_name = f"digitaltrace_report_{input_type}{'_DEMO' if demo_mode else ''}.pdf"
+ 
+    head_left, head_right = st.columns([3, 1.2])
+    with head_left:
+        render_html('<div class="dt-report-title">Identity verification report</div>')
+    with head_right:
+        render_html('<div style="height:26px"></div>')
+        pdf_download_button(pdf_bytes, pdf_name, "pdf_top")
+ 
     if demo_mode:
         render_notice(DEMO_NOTICE, "demo")
     render_notice(DISCLAIMER, "info")
-
+ 
     tag_html = '<span class="dt-tag dt-tag-demo">fabricated demo name</span>' if demo_mode else ""
     render_html(
         f'<div class="dt-input-line"><span>Input</span><strong>{escape(str(input_value))}</strong>{tag_html}</div>'
     )
-
+ 
     col_donut, col_grid = st.columns([1, 1.4])
     with col_donut:
         render_score_donut(risk["score"], risk["level"])
@@ -620,7 +644,7 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
             render_metric_card("Consistent references", risk["consistent_count"], "check")
         with r2c2:
             render_metric_card("Needs verification", risk["ambiguous_count"], "alert")
-
+ 
     st.write("")
     st.caption(
         "This score measures how easily this identity could be confused with others online, "
@@ -628,15 +652,15 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
         "\"Needs verification\" means results involved in a flagged signal, not proof of a problem on their own."
     )
     st.divider()
-
+ 
     if input_type == "name" and not demo_mode:
         render_platform_presence(evidence_list)
         st.divider()
-
+ 
     st.subheader("Summary")
     st.write(summary)
     st.divider()
-
+ 
     if clusters:
         profile_clusters = [c for c in clusters if any(e.get("is_profile") for e in c)]
         if profile_clusters:
@@ -650,7 +674,7 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
                         st.write(f"[{tag}] {ev['title']}")
                         st.write(ev["url"])
             st.divider()
-
+ 
     st.subheader("Findings")
     if not risk["signals"]:
         st.write("No specific risk signals were detected in the available public results.")
@@ -663,7 +687,7 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
                     st.markdown(f"*Evidence {i}* — [{ev['source_type']}] {ev['title']}")
                     st.write(ev["url"])
     st.divider()
-
+ 
     st.subheader("Sources")
     if demo_mode:
         st.caption("These links are fictional placeholders generated for the demo. They do not point to real people.")
@@ -673,38 +697,33 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
             st.write(f"- [{ev['title']}]({ev['url']})")
             seen.add(ev["url"])
     st.divider()
-
+ 
     st.subheader("What to do next")
     for a in actions:
         st.write(f"☐ {a}")
-
+ 
     st.write("")
-    pdf_bytes = generate_pdf_report(input_type, input_value, risk, summary, actions, evidence_list, demo_mode=demo_mode)
-    st.download_button(
-        label="📄 Download PDF report", data=pdf_bytes,
-        file_name=f"digitaltrace_report_{input_type}{'_DEMO' if demo_mode else ''}.pdf",
-        mime="application/pdf",
-    )
+    pdf_download_button(pdf_bytes, pdf_name, "pdf_bottom")
     render_html('<div class="dt-footer-note">Based on public search results only. Not proof of identity or wrongdoing.</div>')
-
-
+ 
+ 
 # ----------------------------------------------------------------------------
 # Page
 # ----------------------------------------------------------------------------
 render_nav()
-
+ 
 # Widget values are already in session_state at the top of a rerun, so we can tell
 # whether this run was triggered by the scan button and shrink the hero accordingly.
 scanning = bool(st.session_state.get("scan_btn", False))
 render_hero(compact=scanning)
-
+ 
 input_value = ""
 uploaded_file = None
-
+ 
 _, mid_col, _ = st.columns([1, 3.4, 1])
 with mid_col:
     current_type = st.session_state.get("type_pick", "Name")
-
+ 
     if current_type == "Image":
         uploaded_file = st.file_uploader(
             "Upload an image", type=["jpg", "jpeg", "png"],
@@ -716,15 +735,15 @@ with mid_col:
             placeholder=PLACEHOLDERS[current_type],
             label_visibility="collapsed", key="query_text",
         )
-
+ 
     type_label = st.radio(
         "What are you checking?", ["Name", "Email", "Phone", "Image"],
         horizontal=True, label_visibility="collapsed", key="type_pick",
     )
     input_type = type_label.lower()
-
+ 
     search_clicked = st.button("START SCAN  →", type="primary", key="scan_btn")
-
+ 
     demo_mode = st.toggle(
         "Demo mode — use fabricated sample data (name searches only)",
         value=False, key="demo_toggle",
@@ -738,12 +757,12 @@ with mid_col:
         )
     if demo_mode and input_type != "name":
         render_notice("Demo mode only applies to name searches. This search will use live data.", "info")
-
+ 
 if not search_clicked:
     render_platform_strip()
     render_trust_row()
     render_how_it_works()
-
+ 
 if search_clicked:
     if input_type == "image":
         if uploaded_file is None:
@@ -760,7 +779,7 @@ if search_clicked:
                 risk = calculate_risk(evidence_list, "image", clusters=None, image_matches=image_matches)
                 narrative = generate_narrative("image", "uploaded photo", risk)
             render_dashboard("image", "Uploaded photo", risk, narrative, evidence_list)
-
+ 
     elif input_type == "name":
         if not input_value.strip():
             render_notice("Please enter a name first.", "warn")
@@ -771,13 +790,13 @@ if search_clicked:
                     results = get_demo_results(input_value)
                 else:
                     results, failed_sources = multi_query_search(input_value, return_status=True)
-
+ 
                 evidence_list = build_evidence_list(results)
                 name_lower = input_value.lower()
                 evidence_list = [ev for ev in evidence_list if name_lower in f"{ev['title']} {ev['snippet']}".lower()]
                 clusters = cluster_identities(evidence_list)
                 risk = calculate_risk(evidence_list, "name", clusters=clusters)
-
+ 
                 profile_clusters = [c for c in clusters if any(e.get("is_profile") for e in c)]
                 context = (
                     f"There are {len(profile_clusters)} likely distinct identity clusters found "
@@ -791,18 +810,18 @@ if search_clicked:
                     )
                 if failed_sources:
                     context += " NOTE: the evidence is incomplete because some search sources did not respond."
-
+ 
                 narrative = generate_narrative(input_type, input_value, risk, extra_context=context)
-
+ 
             if failed_sources:
                 render_notice(
                     "Some searches did not respond in time (" + escape(", ".join(failed_sources)) + "), "
                     "so this report is based on partial evidence. Run it again for a fuller result.",
                     "warn",
                 )
-
+ 
             render_dashboard(input_type, input_value, risk, narrative, evidence_list, demo_mode=demo_mode, clusters=clusters)
-
+ 
     else:
         if not input_value.strip():
             render_notice("Please enter a value first.", "warn")
@@ -816,6 +835,6 @@ if search_clicked:
                 risk = calculate_risk(evidence_list, input_type, clusters=None)
                 narrative = generate_narrative(input_type, input_value, risk)
             render_dashboard(input_type, input_value, risk, narrative, evidence_list)
-
+ 
 render_recent_searches()
 render_footer()

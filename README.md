@@ -1,146 +1,156 @@
-DigitalTrace — Citizen Digital Footprint & Scam Awareness Tool
+DigitalTrace
 
-Track: Knowledge & Public Interest — SerpApi India Hackathon 2026
+Check your public digital footprint, for self-verification and citizen awareness.
 
-The Problem
+DigitalTrace is an OSINT-style digital footprint and scam-awareness checker. Give it a name, email, phone number or photo and it shows where that identity appears in public search results, whether it could be confused with other people, and whether any publicly observable signals (such as conflicting profiles or reused images) deserve a second look.
 
-Online scams and identity misuse are a growing public safety concern in India, and most citizens have no easy way to check their own digital exposure, verify a suspicious contact, or tell whether a name genuinely belongs to one clear identity before trusting it.
+Built for the SerpApi India Hackathon 2026, under the Knowledge & Public Interest track.
 
-What It Does
+Important: DigitalTrace does not decide whether a person is a scammer or a threat. It surfaces public signals that may warrant further verification. Always confirm identity through an independent, trusted channel before acting on a report.
 
-DigitalTrace runs a multi-source OSINT (Open Source Intelligence) investigation on a name, email, phone number, or image, and turns the results into a clear, evidence-backed report — not just a list of links, and not just an AI opinion.
+Features
+Multi-platform search: runs several targeted queries covering LinkedIn, Instagram, Facebook, news and the wider web (Google Search via SerpApi).
+Reverse image search: upload a photo to see where else it appears (Google Reverse Image Search via SerpApi, with temporary image hosting on Cloudinary).
+Evidence engine: every search result is normalised into a structured evidence item with its source, title, URL and snippet.
+Identity clustering: groups results into likely-distinct people who share the same name, based on their own profile pages.
+Deterministic risk scoring: the 0-100 exposure score is rule-based and fully traceable. It is not an AI guess.
+Gemini explains, never decides: Google Gemini turns the computed score and evidence into a plain-language summary and recommended actions.
+Evidence drill-down: each flagged signal expands to show why it was raised and the exact sources behind it.
+Platform presence view: shows which platforms returned results for a name search.
+PDF export: download the full report as a PDF.
+Privacy-first demo mode: generates entirely fabricated results so the tool can be demonstrated without exposing any real person's identity.
+Partial-evidence warnings: if a search source times out, the report says so instead of pretending to be complete.
+Dark glass UI: a landing page with a search bar and input-type pills, and a report dashboard with score ring, metric cards and session search history.
+How it works
+Input (name / email / phone / image)
+        |
+        v
+SerpApi searches (multi-query text search, or reverse image search)
+        |
+        v
+Evidence engine  ->  structured evidence list
+        |
+        v
+Identity clustering (name searches)
+        |
+        v
+Rule-based risk scorer  ->  score, level, signals, counts
+        |
+        v
+Gemini narrative (explains the result only)
+        |
+        v
+Dashboard + PDF report
+Tech stack
+Area	Tools
+Language / UI	Python, Streamlit
+Search	SerpApi (Google Search, Google Reverse Image Search)
+Explanation	Google Gemini API (gemini-3.6-flash)
+Image hosting	Cloudinary (temporary URLs for reverse image search)
+Reports	fpdf2
+Project structure
+digital-footprint-checker/
+├── app.py                  # Streamlit UI: landing page, dashboard, flow control
+├── serpapi_client.py       # SerpApi text / reverse-image search, image upload
+├── evidence_engine.py      # Builds structured evidence from raw results
+├── identity_clustering.py  # Groups evidence into likely-distinct identities
+├── risk_scorer.py          # Deterministic, rule-based exposure scoring
+├── analyzer.py             # Gemini narrative (summary + recommended actions)
+├── pdf_generator.py        # PDF report export
+├── demo_data.py            # Fabricated sample results for demo mode
+├── assets/                 # Banner and images
+├── .streamlit/config.toml  # Dark theme settings
+├── requirements.txt
+├── .env.example
+└── LICENSE
+Setup
 
-The core design principle: the AI never decides the risk score. A deterministic, rule-based engine calculates the score from concrete, countable evidence. Gemini's only job is to explain that score in plain language. This makes every number in a DigitalTrace report reproducible and auditable — if a judge, a user, or a police cyber cell asks "why was this flagged?", the answer is always traceable back to specific evidence, not an AI's opinion.
+1. Clone the repository
 
-Key features
-Multi-query OSINT search — for names, runs separate targeted searches across LinkedIn, Instagram, Facebook, news/press, and the general web, instead of one mixed query
-Evidence engine — converts every raw search result into a structured record: source type (social profile, news, spam-lookup site, data aggregator), detected role, detected location, and whether it's an actual profile page or just a third-party post mentioning the name
-Relevance filtering — discards results that don't actually contain the searched name/email/phone, preventing unrelated search noise from being treated as evidence (a real bug found and fixed during validation — see Evaluation below)
-Identity clustering — groups evidence into likely-distinct identities using profile handles, locations, and roles, and specifically distinguishes a person's own profile pages from other people's posts that merely mention them
-Deterministic risk scoring — a fixed, documented point system (see risk_scorer.py) calculates an exposure score out of 100 from named signals: identity inconsistency, multiple conflicting profiles, contact inconsistency, image reuse, suspicious sources, numeric-heavy handles, and auto-generated spam-lookup sites
-Content-based spam detection — recognizes auto-generated phone/data-lookup spam pages by their title pattern (e.g. "9289321, Shared Mobility Syndicate Tmi"), not just by domain, so it generalizes to new spam sites automatically
-Evidence-to-conclusion drill-down — every flagged signal in the dashboard expands to show exactly which evidence triggered it and why
-Reverse image search — via Cloudinary (temporary public hosting) + SerpApi, checks where else an uploaded photo appears online
-PDF export — a full downloadable report including the score, signals, evidence, sources, and recommended actions
-Framing: "Footprint Confusability," not a danger score
+bash
+git clone https://github.com/Eshanvyas2601/digital-footprint-checker.git
+cd digital-footprint-checker
 
-DigitalTrace's exposure score measures how easily an identity could be confused with others online — not whether a person is dangerous. This distinction is stated explicitly on every report:
+2. Create and activate a virtual environment
 
-"DigitalTrace does not determine whether a person is a scammer or a threat. It identifies publicly observable signals — such as conflicting profiles or reused images — that may warrant further verification. Always confirm identity through an independent, trusted channel before acting on this report."
+powershell
+python -m venv venv
+venv\Scripts\activate
 
-Architecture
-User input (name / email / phone / image)
-    ↓
-SerpApi multi-query search — separate targeted searches across
-LinkedIn, Instagram, Facebook, news, and the general web
-    ↓
-Evidence engine — extracts structured facts from each result,
-filters out irrelevant matches, and clusters likely-distinct identities
-    ↓
-Deterministic risk scoring — fixed, weighted, reproducible signals
-(no AI involved in this step)
-    ↓
-Gemini AI — explains the pre-calculated score and signals in
-plain language; cannot change the score itself
-    ↓
-Dashboard + PDF report — exposure score, findings with evidence
-drill-down, sources, and recommended verification actions
-Why SerpApi is essential
+On macOS / Linux: source venv/bin/activate
 
-SerpApi is not a peripheral feature — it is the sole source of real-world evidence the entire system reasons over. Every signal in the risk-scoring engine, every identity cluster, and every piece of evidence shown to the user originates from a SerpApi call (google search engine for multi-query text search, google_reverse_image for photo matching). Remove SerpApi, and the evidence engine, clustering, and scoring engine all have nothing to process — there is no fallback data source. Gemini is downstream of SerpApi's data; it never searches on its own.
+3. Install dependencies
 
-How the risk scoring works
+bash
+pip install -r requirements.txt
 
-Scoring methodology (documented in full in risk_scorer.py):
+4. Add your API keys
 
-Signal	Points	What it detects
-Identity inconsistency	+25	Same name, conflicting professional fields, across the person's own profile pages only
-Multiple conflicting profiles	+15	3+ distinct genuine profile-page clusters under one identity
-Contact inconsistency	+20	Same email/phone tied to differing names
-Image reuse	+25	Uploaded photo found on 3+ unrelated domains
-Suspicious/low-context source	+10	Result from a data-aggregator style site
-Numeric-heavy handle	+5	Profile handle with an unusually high digit count
-Low-quality lookup sites	+5	Contact appears mainly on auto-generated spam directories
+Copy .env.example to .env and fill in the values for SerpApi, Google Gemini and Cloudinary. The .env file is git-ignored, so never commit it.
 
-Score is capped at 100. Risk level thresholds: 0–25 LOW, 26–55 MEDIUM, 56+ HIGH.
+5. Run the app
 
-Evaluation
+bash
+streamlit run app.py
 
-Rather than claim the tool "just works," it was tested against 10 real-world cases spanning three categories, using live search data:
+Open the address Streamlit prints (usually http://localhost:8501).
 
-#	Case	Category	Result	Correct?
+Usage
+Choose what you are checking: Name, Email, Phone or Image.
+Enter the value (or upload a photo) and click START SCAN.
+Read the report: exposure score, signals, identity clusters, sources and recommended next steps.
+Download the PDF report if you need a copy.
+Demo mode
+
+Real identities should not be shown in public demonstrations. Turn on Demo mode (name searches only) to use entirely fabricated sample data. Try a fictional name such as Aarav Testwala. The names, profiles and links in a demo report are fabricated, and the report is clearly labelled as such. Any resemblance to a real person is coincidental.
+
+Privacy and ethics
+Only publicly available search results are used.
+The tool is designed for self-verification and citizen awareness, not for profiling or targeting individuals.
+The score measures how easily an identity could be confused with others, or how exposed public information is. It is not a judgment of danger or wrongdoing.
+Every flag links back to its source so a human can check it.
+Session search history is kept only in the current browser session.
+Limitations
+Public data only: private profiles and pages not indexed by search engines are invisible to DigitalTrace.
+Search coverage varies: results depend on what SerpApi and Google return at that moment. A source can time out, in which case the report is marked as based on partial evidence.
+Common names are ambiguous: clustering reduces identity confusion but cannot fully resolve it.
+Not a verdict: a low or high score is a signal to verify further, not proof of anything.
+Rule-based scoring: the rules are transparent but deliberately simple, so they can miss subtle cases.
+API dependence: live searches need working SerpApi, Gemini and Cloudinary keys and are subject to their usage limits.
+Demo mode is name-only: email, phone and image searches always use live data.
+Validation
+
+DigitalTrace was tested on 10 cases covering public figures, common names, an empty case, an image, and a phone number.
+
+#	Test input	Case type	Result	Behaved as expected?
 1	Sundar Pichai	Consistent public figure	LOW (20/100)	Yes
 2	Satya Nadella	Consistent public figure	LOW (0/100)	Yes
-3	Ravi Kumar	Ambiguous — very common name	MEDIUM (45/100)	Yes
-4	Fabricated email address	Empty/negative case	LOW (0/100)	Yes — no hallucinated findings
+3	Ravi Kumar	Ambiguous, very common name	MEDIUM (45/100)	Yes
+4	Fabricated email address	Empty/negative case	LOW (0/100)	Yes, no hallucinated findings
 5	Eshan Vyas	Ambiguous name	LOW (0/100)	Yes, given live search data at test time
 6	Ansh Tiwari	Ambiguous name	MEDIUM (45/100)	Yes
-7	Uploaded photo	Reverse image search	LOW (25/100)	Partially — correct detection, revealed a scope limitation
-8	Phone number	Contact + spam detection	LOW (25/100)	Partially — correct, one documented false positive
-9	Manoj Kumar Pandey	Common name + historical figure	MEDIUM (30/100)	Yes — cleanly separated living professionals from war-hero tribute content
-10	Balwinder Shukla	Initially broken, then fixed	LOW (0/100)	Yes, after the relevance-filter fix (see below)
+7	Uploaded photo	Reverse image search	LOW (25/100)	Partially: correct detection, revealed a scope limitation
+8	Phone number	Contact + spam detection	LOW (25/100)	Partially: correct, one documented false positive
+9	Manoj Kumar Pandey	Common name + historical figure	MEDIUM (30/100)	Yes: cleanly separated living professionals from war-hero tribute content
+10	Balwinder Shukla	Initially broken, then fixed	LOW (0/100)	Yes, after the relevance-filter fix
+Bugs found and fixed during evaluation
 
-Two real bugs were found and fixed during this evaluation, not before it:
+Two real bugs were caught by this testing and fixed, not found beforehand:
 
-Early testing (cases 1 and 2) revealed that third-party posts about a person (e.g., someone else's LinkedIn post praising a CEO) were being miscounted as separate conflicting identities. Fixed by distinguishing genuine profile pages from posts/content in the evidence engine.
-Case 10 initially returned completely unrelated people's profiles for an uncommon name. Fixed by adding a relevance filter that discards any result not actually containing the searched name/email/phone before scoring.
+Found in	Problem	Fix
+Cases 1 and 2	Third-party posts about a person (for example, someone else's LinkedIn post praising a CEO) were miscounted as separate, conflicting identities.	The evidence engine now distinguishes genuine profile pages from posts and other content.
+Case 10	An uncommon name returned completely unrelated people's profiles.	A relevance filter now discards any result that does not actually contain the searched name, email or phone before scoring.
 
 This is included deliberately: an evaluation that only shows successes is less credible than one that shows a real testing process catching and fixing real issues.
 
-Known limitations
-Search results change over time. Since DigitalTrace queries live search engines rather than a static database, the same search can return different results — and therefore a different score — on different days, as case 5 showed.
-No facial recognition. Reverse image search relies on Google's visual similarity matching, not facial recognition. It reliably detects exact photo reuse but can match on incidental visual elements (clothing, background) rather than the person's identity for non-public figures, and cannot yet distinguish suspicious reuse (a stolen profile picture) from benign reuse (a stock/product photo). True facial-recognition-based matching was deliberately excluded due to privacy and ethical concerns beyond this project's scope.
-Name-detection uses lightweight pattern matching, not full NLP, so it can occasionally misidentify an unrelated capitalized phrase (e.g., a news headline) as a conflicting name. This trade-off was made deliberately for speed and simplicity.
-Spam-lookup detection is pattern-based and may not catch every low-quality source, particularly ones using unrelated legitimate-looking domains (e.g., CDN hosts) rather than known spam patterns.
-AI explanations depend on Gemini's availability. During periods of high demand, the app falls back to a raw evidence-based summary rather than a natural-language explanation, so the tool remains functional even if the AI layer is temporarily unavailable.
-Ethical Use
-
-This tool is designed strictly for self-verification and citizen awareness — checking your own digital footprint, or vetting a suspicious contact before you trust them. It is not intended for surveilling others without consent. No search queries or results are stored beyond the active session, and API keys are supplied by the user and never logged or transmitted elsewhere.
-
-Tech Stack
-Python — core logic
-Streamlit — web interface
-SerpApi — Google Search API (multi-query text search) and Google Reverse Image Search API
-Google Gemini API — AI-generated, evidence-grounded report explanations
-Cloudinary — temporary public image hosting to enable reverse image search on user uploads
-fpdf2 — PDF report generation
-Project Structure
-app.py                   # Streamlit UI, dashboard, and main flow
-serpapi_client.py        # SerpApi search, multi-query search, reverse image, Cloudinary upload
-evidence_engine.py       # Converts raw results into structured, classified evidence
-identity_clustering.py   # Groups evidence into likely-distinct identities
-risk_scorer.py           # Deterministic, weighted, documented risk scoring (no AI)
-analyzer.py              # Gemini AI narrative generation, grounded in the calculated score
-pdf_generator.py         # PDF report export
-requirements.txt         # Python dependencies
-.env.example             # Template for required environment variables
-Setup Instructions
-Clone this repository:
-   git clone https://github.com/Eshanvyas2601/digital-footprint-checker.git
-   cd digital-footprint-checker
-Create and activate a virtual environment:
-   python -m venv venv
-   venv\Scripts\activate
-   source venv/bin/activate
-Install dependencies:
-   pip install -r requirements.txt
-Copy .env.example to .env and fill in your own API keys:
-   SERPAPI_KEY=your_serpapi_key_here
-   GEMINI_API_KEY=your_gemini_key_here
-   CLOUDINARY_CLOUD_NAME=your_cloud_name_here
-   CLOUDINARY_API_KEY=your_cloudinary_api_key_here
-   CLOUDINARY_API_SECRET=your_cloudinary_api_secret_here
-Run the app:
-   streamlit run app.py
-Future Scope
-Distinguishing suspicious image reuse from benign stock-photo reuse (e.g., checking whether matches appear on social/dating platforms specifically)
-Heavier NLP for name/role detection to reduce false positives from headline-style text
-A confidence interval alongside the point score, reflecting evidence volume and quality
-Deployment as a public web app with rate-limited free usage
+Future work
+Deploy as a public web app.
+Add more platform-specific queries (for example a dedicated GitHub query).
+Expand the scoring rules and the validation set.
 License
 
-MIT License — see the LICENSE file for details.
+See LICENSE.
 
 Author
 
-Built by Eshan Vyas for the SerpApi India Hackathon 2026.
+Built by Eshan Vyas — github.com/Eshanvyas2601

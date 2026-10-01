@@ -1,5 +1,7 @@
 import os
 import base64
+import threading
+import textwrap
 from datetime import datetime
 from html import escape
 from urllib.parse import quote
@@ -108,6 +110,11 @@ def render_html(markup: str):
     st.markdown(cleaned, unsafe_allow_html=True)
  
  
+def _log(step):
+    """Prints progress to the terminal so we can see exactly where a scan stops."""
+    print(f"[DigitalTrace] {step}", flush=True)
+ 
+ 
 def _get_banner_base64():
     if not os.path.exists(BANNER_PATH):
         return None
@@ -143,7 +150,7 @@ THEME_CSS = """
     color: var(--dt-text);
 }
 [data-testid="stHeader"] { background: transparent; }
-[data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu, footer { display: none !important; }
+[data-testid="stDecoration"], [data-testid="stAppDeployButton"], [data-testid="stMainMenu"], #MainMenu, footer { display: none !important; }
 [data-testid="stMainBlockContainer"], .block-container { max-width: 1120px; padding-top: 1.2rem; padding-bottom: 3rem; }
  
 .stApp, .stApp p, .stApp li, .stApp label, .stApp button, .stApp input, .stApp textarea,
@@ -590,6 +597,9 @@ def render_footer():
 def pdf_download_button(pdf_bytes, file_name, key):
     """PDF download button. on_click="ignore" stops Streamlit rerunning the page when it is
     clicked (which would wipe the report from the screen); older Streamlit versions fall back."""
+    if pdf_bytes is None:
+        render_html('<div class="dt-empty" style="padding-top:8px;">PDF unavailable</div>')
+        return
     kwargs = dict(
         label="📄 Download PDF report", data=pdf_bytes, file_name=file_name,
         mime="application/pdf", key=key,
@@ -600,6 +610,142 @@ def pdf_download_button(pdf_bytes, file_name, key):
         st.download_button(**kwargs)
  
  
+_PDF_REPLACEMENTS = {
+    "\u2014": "-", "\u2013": "-", "\u2022": "*", "\u2018": "'", "\u2019": "'",
+    "\u201c": '"', "\u201d": '"', "\u2026": "...", "\u2192": "->", "\u26a0": "!", "\u2610": "[ ]",
+}
+ 
+ 
+def _pdf_text(value):
+    """Make text safe for the built-in Helvetica font (Latin-1 only)."""
+    text = str(value)
+    for old, new in _PDF_REPLACEMENTS.items():
+        text = text.replace(old, new)
+    text = text.encode("latin-1", "replace").decode("latin-1")
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+ 
+ 
+def build_simple_pdf(input_type, input_value, risk, summary, actions, evidence_list, demo_mode):
+    """Dependency-free, plain-layout PDF. Used only if the standard PDF builder fails or gets stuck,
+    so the download button always works."""
+    blocks = [("DigitalTrace - Identity Verification Report", 16, True)]
+    if demo_mode:
+        blocks.append(("DEMO MODE - FABRICATED DATA. Names, profiles and links below are fictional.", 9, True))
+    blocks += [
+        (f"Input ({input_type}): {input_value}", 11, False),
+        (f"Generated: {datetime.now().strftime('%d %b %Y, %H:%M')}", 9, False),
+        ("", 6, False),
+        (f"Exposure score: {risk['score']}/100 ({risk['level']})", 13, True),
+        (f"Sources checked: {len(evidence_list)}   Signals: {len(risk['signals'])}   "
+         f"Consistent references: {risk['consistent_count']}   Needs verification: {risk['ambiguous_count']}", 10, False),
+        ("", 6, False),
+        ("Summary", 12, True),
+        (summary, 10, False),
+        ("", 6, False),
+        ("Findings", 12, True),
+    ]
+    if not risk["signals"]:
+        blocks.append(("No specific risk signals were detected in the available public results.", 10, False))
+    for signal in risk["signals"]:
+        blocks.append((f"- {signal['label']} ({signal['points']} points): {signal['reason']}", 10, True))
+        for ev in signal["evidence"]:
+            blocks.append((f"    [{ev['source_type']}] {ev['title']} - {ev['url']}", 8, False))
+    blocks += [("", 6, False), ("Sources", 12, True)]
+    seen = set()
+    for ev in evidence_list[:15]:
+        if ev["url"] and ev["url"] not in seen:
+            blocks.append((f"- {ev['title']} - {ev['url']}", 8, False))
+            seen.add(ev["url"])
+    blocks += [("", 6, False), ("What to do next", 12, True)]
+    for action in actions:
+        blocks.append((f"[ ] {action}", 10, False))
+    blocks += [("", 6, False), (DISCLAIMER, 8, False)]
+ 
+    width, height, margin = 595, 842, 50
+    pages, y = [[]], height - margin
+    for text, size, bold in blocks:
+        lead = size * 1.35
+        max_chars = max(10, int((width - 2 * margin) / (size * 0.52)))
+        clean = str(text)
+        for key, new in _PDF_REPLACEMENTS.items():
+            clean = clean.replace(key, new)
+        clean = clean.encode("latin-1", "replace").decode("latin-1")
+        for line in (textwrap.wrap(clean, max_chars, break_long_words=True) or [""]):
+            if y - lead < margin:
+                pages.append([])
+                y = height - margin
+            y -= lead
+            pages[-1].append((y, size, bold, line))
+ 
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+ 
+    def add(body):
+        offsets.append(len(out))
+        out.extend(f"{len(offsets)} 0 obj\n".encode())
+        out.extend(body)
+        out.extend(b"\nendobj\n")
+ 
+    add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    kids = " ".join(f"{5 + 2 * i} 0 R" for i in range(len(pages)))
+    add(f"<< /Type /Pages /Kids [{kids}] /Count {len(pages)} >>".encode())
+    add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+    add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
+    for i, lines in enumerate(pages):
+        parts = []
+        for (ly, size, bold, line) in lines:
+            parts.append(f"BT /{'F2' if bold else 'F1'} {size} Tf {margin} {ly:.1f} Td ({_pdf_text(line)}) Tj ET")
+        content = "\n".join(parts).encode("latin-1", "replace")
+        add(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] "
+            f"/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {6 + 2 * i} 0 R >>".encode()
+        )
+        add(f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"\nendstream")
+    xref_pos = len(out)
+    out.extend(f"xref\n0 {len(offsets) + 1}\n".encode())
+    out.extend(b"0000000000 65535 f \n")
+    for off in offsets:
+        out.extend(f"{off:010d} 00000 n \n".encode())
+    out.extend(f"trailer\n<< /Size {len(offsets) + 1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF".encode())
+    return bytes(out)
+ 
+ 
+def build_pdf_with_timeout(input_type, input_value, risk, summary, actions, evidence_list, demo_mode, timeout=12):
+    """Runs the standard generate_pdf_report in a background thread with a time limit. If it fails or
+    gets stuck, a simple built-in PDF is created instead so the button always works.
+    Returns (pdf_bytes, warning_message); the warning is None when the standard PDF worked."""
+    reason = None
+    if st.session_state.get("pdf_main_hung"):
+        reason = "the standard PDF builder got stuck earlier in this session"
+    else:
+        result = {}
+ 
+        def worker():
+            try:
+                result["bytes"] = generate_pdf_report(
+                    input_type, input_value, risk, summary, actions, evidence_list, demo_mode=demo_mode
+                )
+            except Exception as exc:
+                result["error"] = f"{type(exc).__name__}: {exc}"
+ 
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        thread.join(timeout)
+        if thread.is_alive():
+            st.session_state["pdf_main_hung"] = True
+            reason = f"it took longer than {timeout} seconds"
+        elif "error" in result:
+            reason = result["error"]
+        else:
+            return result.get("bytes"), None
+ 
+    try:
+        data = build_simple_pdf(input_type, input_value, risk, summary, actions, evidence_list, demo_mode)
+        return data, f"The standard PDF layout could not be used ({reason}), so a simplified PDF was created instead."
+    except Exception as exc:
+        return None, f"The PDF report could not be generated: {reason}; the simplified PDF also failed ({type(exc).__name__}: {exc})"
+ 
+ 
 def render_dashboard(input_type, input_value, risk, narrative, evidence_list, demo_mode=False, clusters=None):
     summary, actions = parse_narrative(narrative)
  
@@ -608,9 +754,8 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
         "level": risk["level"], "demo": demo_mode, "time": datetime.now().strftime("%d %b, %H:%M"),
     })
  
-    # Build the PDF once, up front, so the download button can sit at the TOP of the report
-    # (visible the moment results appear) and again at the bottom.
-    pdf_bytes = generate_pdf_report(input_type, input_value, risk, summary, actions, evidence_list, demo_mode=demo_mode)
+    # The report is drawn FIRST. The PDF is built at the very end (with a time limit), and its
+    # button is dropped into this reserved slot at the top, so a slow PDF can never hide results.
     pdf_name = f"digitaltrace_report_{input_type}{'_DEMO' if demo_mode else ''}.pdf"
  
     head_left, head_right = st.columns([3, 1.2])
@@ -618,7 +763,8 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
         render_html('<div class="dt-report-title">Identity verification report</div>')
     with head_right:
         render_html('<div style="height:26px"></div>')
-        pdf_download_button(pdf_bytes, pdf_name, "pdf_top")
+        pdf_slot = st.empty()
+        pdf_slot.markdown('<div class="dt-empty" style="padding-top:8px;">Preparing PDF...</div>', unsafe_allow_html=True)
  
     if demo_mode:
         render_notice(DEMO_NOTICE, "demo")
@@ -703,8 +849,18 @@ def render_dashboard(input_type, input_value, risk, narrative, evidence_list, de
         st.write(f"☐ {a}")
  
     st.write("")
+    _log("report drawn, building PDF")
+    pdf_bytes, pdf_warning = build_pdf_with_timeout(
+        input_type, input_value, risk, summary, actions, evidence_list, demo_mode
+    )
+    _log(f"PDF step done (warning: {pdf_warning})")
+    with pdf_slot.container():
+        pdf_download_button(pdf_bytes, pdf_name, "pdf_top")
+    if pdf_warning:
+        render_notice(escape(pdf_warning), "warn")
     pdf_download_button(pdf_bytes, pdf_name, "pdf_bottom")
     render_html('<div class="dt-footer-note">Based on public search results only. Not proof of identity or wrongdoing.</div>')
+    _log("dashboard done")
  
  
 # ----------------------------------------------------------------------------
@@ -764,6 +920,7 @@ if not search_clicked:
     render_how_it_works()
  
 if search_clicked:
+    _log(f"scan started: {input_type}, demo={demo_mode}")
     if input_type == "image":
         if uploaded_file is None:
             render_notice("Please upload an image first.", "warn")
@@ -790,12 +947,16 @@ if search_clicked:
                     results = get_demo_results(input_value)
                 else:
                     results, failed_sources = multi_query_search(input_value, return_status=True)
+                _log(f"searches finished (failed sources: {failed_sources})")
  
                 evidence_list = build_evidence_list(results)
                 name_lower = input_value.lower()
                 evidence_list = [ev for ev in evidence_list if name_lower in f"{ev['title']} {ev['snippet']}".lower()]
+                _log(f"evidence built: {len(evidence_list)} items")
                 clusters = cluster_identities(evidence_list)
+                _log("clusters built")
                 risk = calculate_risk(evidence_list, "name", clusters=clusters)
+                _log(f"risk scored: {risk['score']}")
  
                 profile_clusters = [c for c in clusters if any(e.get("is_profile") for e in c)]
                 context = (
@@ -811,7 +972,9 @@ if search_clicked:
                 if failed_sources:
                     context += " NOTE: the evidence is incomplete because some search sources did not respond."
  
+                _log("calling Gemini")
                 narrative = generate_narrative(input_type, input_value, risk, extra_context=context)
+                _log("Gemini step finished")
  
             if failed_sources:
                 render_notice(
@@ -820,6 +983,7 @@ if search_clicked:
                     "warn",
                 )
  
+            _log("rendering dashboard")
             render_dashboard(input_type, input_value, risk, narrative, evidence_list, demo_mode=demo_mode, clusters=clusters)
  
     else:

@@ -127,12 +127,12 @@ DigitalTrace was tested on 10 cases covering public figures, common names, an em
 2	Satya Nadella	Consistent public figure	LOW (0/100)	Yes
 3	Ravi Kumar	Ambiguous, very common name	MEDIUM (45/100)	Yes
 4	Fabricated email address	Empty/negative case	LOW (0/100)	Yes, no hallucinated findings
-5	Eshan Vyas	Ambiguous name	LOW (0/100)	Yes, given live search data at test time
-6	Ansh Tiwari	Ambiguous name	MEDIUM (45/100)	Yes
+5	Common Indian Name A	Ambiguous name	LOW (0/100)	Yes, given live search data at test time
+6	Common Indian Name B	Ambiguous name	MEDIUM (45/100)	Yes
 7	Uploaded photo	Reverse image search	LOW (25/100)	Partially: correct detection, revealed a scope limitation
 8	Phone number	Contact + spam detection	LOW (25/100)	Partially: correct, one documented false positive
-9	Manoj Kumar Pandey	Common name + historical figure	MEDIUM (30/100)	Yes: cleanly separated living professionals from war-hero tribute content
-10	Balwinder Shukla	Initially broken, then fixed	LOW (0/100)	Yes, after the relevance-filter fix
+9	Common Indian Name C	Common name + historical figure	MEDIUM (30/100)	Yes: cleanly separated living professionals from war-hero tribute content
+10	Uncommon Indian Name D	Initially broken, then fixed	LOW (0/100)	Yes, after the relevance-filter fix
 Bugs found and fixed during evaluation
 
 Two real bugs were caught by this testing and fixed, not found beforehand:
